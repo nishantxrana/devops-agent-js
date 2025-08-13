@@ -258,15 +258,25 @@ Create a PAT with the following scopes:
 
 ## 🧪 Testing
 
-**Test webhook endpoint:**
+This project includes automated tests for both the backend and frontend.
+
+### Backend Tests
+
+The backend uses Jest for integration testing.
+
 ```bash
-curl -X POST http://localhost:3001/api/webhooks/test \
-  -H "Content-Type: application/json" \
-  -d '{"eventType": "test", "message": "Hello World"}'
+# From the root directory
+npm test --prefix backend
 ```
 
-**Test Azure DevOps connection:**
-Use the frontend Settings page to test your configuration.
+### Frontend Tests
+
+The frontend uses Vitest and React Testing Library for component testing.
+
+```bash
+# From the root directory
+npm test --prefix frontend
+```
 
 ## 📊 Monitoring
 
@@ -283,7 +293,27 @@ Use the frontend Settings page to test your configuration.
 
 ## 🚀 Production Deployment
 
-### Environment Variables
+### Running with Docker (Recommended)
+
+The easiest way to run the application in production is with Docker.
+
+1.  **Create an environment file:**
+    Create a file named `backend.env` in the root of the project and add your environment variables there. You can copy the content from `backend/.env.example`.
+
+2.  **Build the Docker image:**
+    ```bash
+    docker build -t devops-agent .
+    ```
+
+3.  **Run the Docker container:**
+    ```bash
+    docker run -p 80:80 --env-file backend.env devops-agent
+    ```
+    The application will be available at `http://localhost`.
+
+### Manual Deployment
+
+#### Environment Variables
 Set all required environment variables in your production environment.
 
 ### Security

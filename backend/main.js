@@ -75,36 +75,45 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// Start server
-app.listen(PORT, async () => {
-  logger.info(`Azure DevOps Monitoring Agent Backend started on port ${PORT}`);
-  
-  try {
-    // Validate configuration (but don't fail if Azure DevOps is not configured yet)
-    let configValid = false;
-    try {
-      await configLoader.validate();
-      logger.info('Configuration validated successfully');
-      configValid = true;
-    } catch (configError) {
-      logger.warn('Configuration validation failed (this is expected for initial setup):', configError.message);
-    }
-    
-    // Start polling jobs only if configuration is valid
-    if (configValid && process.env.AZURE_DEVOPS_ORG && process.env.AZURE_DEVOPS_PROJECT && process.env.AZURE_DEVOPS_PAT) {
-      startPollingJobs();
-      logger.info('Polling jobs started');
-    } else {
-      logger.info('Polling jobs not started - Azure DevOps configuration incomplete or invalid');
-    }
-    
-  } catch (error) {
-    logger.error('Failed to initialize application:', error);
-    // Don't exit in development mode to allow configuration
-    if (process.env.NODE_ENV === 'production') {
-      process.exit(1);
-    }
-  }
-});
+let server;
 
-export default app;
+const startServer = async () => {
+  server = app.listen(PORT, async () => {
+    logger.info(`Azure DevOps Monitoring Agent Backend started on port ${PORT}`);
+    
+    try {
+      // Validate configuration (but don't fail if Azure DevOps is not configured yet)
+      let configValid = false;
+      try {
+        await configLoader.validate();
+        logger.info('Configuration validated successfully');
+        configValid = true;
+      } catch (configError) {
+        logger.warn('Configuration validation failed (this is expected for initial setup):', configError.message);
+      }
+
+      // Start polling jobs only if configuration is valid
+      if (configValid && process.env.AZURE_DEVOPS_ORG && process.env.AZURE_DEVOPS_PROJECT && process.env.AZURE_DEVOPS_PAT) {
+        startPollingJobs();
+        logger.info('Polling jobs started');
+      } else {
+        logger.info('Polling jobs not started - Azure DevOps configuration incomplete or invalid');
+      }
+
+    } catch (error) {
+      logger.error('Failed to initialize application:', error);
+      // Don't exit in development mode to allow configuration
+      if (process.env.NODE_ENV === 'production') {
+        process.exit(1);
+      }
+    }
+  });
+  return server;
+};
+
+// Start the server if this file is run directly
+if (process.argv[1] === new URL(import.meta.url).pathname) {
+  startServer();
+}
+
+export { app, startServer };
