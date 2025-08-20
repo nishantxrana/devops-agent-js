@@ -114,6 +114,27 @@ export const apiService = {
   async testConnection() {
     const response = await api.post('/settings/test-connection')
     return response.data
+  },
+
+  // Agent
+  async getAgentStatus() {
+    const response = await api.get('/agent/status')
+    return response.data
+  },
+
+  async getAgentReasoning(params = {}) {
+    const response = await api.get('/agent/reasoning', { params })
+    return response.data
+  },
+
+  async getTaskHistory(params = {}) {
+    const response = await api.get('/agent/tasks/history', { params })
+    return response.data
+  },
+
+  async createManualTask(task) {
+    const response = await api.post('/agent/tasks/manual', task)
+    return response.data
   }
 }
 
