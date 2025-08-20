@@ -3,6 +3,7 @@ import { aiService } from '../ai/aiService.js';
 import { notificationService } from '../notifications/notificationService.js';
 import { markdownFormatter } from '../utils/markdownFormatter.js';
 import { azureDevOpsClient } from '../devops/azureDevOpsClient.js';
+import { agentOrchestrator } from '../agent/agentOrchestrator.js';
 
 class PullRequestWebhook {
   async handleCreated(req, res) {
@@ -32,32 +33,46 @@ class PullRequestWebhook {
       // Add web URL to the resource object
       resource.webUrl = azureDevOpsClient.constructPullRequestWebUrl(resource);
 
-      // Generate AI summary of the PR changes
-      let aiSummary = null;
-      try {
-        logger.info('Generating AI summary for pull request:', { pullRequestId, title });
-        aiSummary = await aiService.summarizePullRequest(resource);
-      } catch (error) {
-        logger.error('Error generating AI summary for PR:', error);
-      }
+      // Route through agent orchestrator
+      const result = await agentOrchestrator.processWebhookEvent('pull-request-created', req.body);
+      
+      if (result.success) {
+        res.json({
+          message: 'Pull request created webhook processed successfully',
+          pullRequestId,
+          taskId: result.taskId,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        // Fallback to direct processing if agent fails
+        logger.warn('Agent processing failed, falling back to direct processing', { error: result.error });
+        
+        // Generate AI summary of the PR changes
+        let aiSummary = null;
+        try {
+          logger.info('Generating AI summary for pull request:', { pullRequestId, title });
+          aiSummary = await aiService.summarizePullRequest(resource);
+        } catch (error) {
+          logger.error('Error generating AI summary for PR:', error);
+        }
 
-      // Format notification message
-      const message = markdownFormatter.formatPullRequestCreated(resource, aiSummary);
-      
-      // Send notification
-      await notificationService.sendNotification(message, 'pull-request-created');
-      
-      res.json({
-        message: 'Pull request created webhook processed successfully',
-        pullRequestId,
-        timestamp: new Date().toISOString()
-      });
+        // Format notification message
+        const message = markdownFormatter.formatPullRequestCreated(resource, aiSummary);
+        
+        // Send notification
+        await notificationService.sendNotification(message, 'pull-request-created');
+        
+        res.json({
+          message: 'Pull request created webhook processed successfully (fallback)',
+          pullRequestId,
+          timestamp: new Date().toISOString()
+        });
+      }
 
     } catch (error) {
       logger.error('Error processing pull request created webhook:', error);
       res.status(500).json({
         error: 'Failed to process pull request created webhook',
-        message: error.message
       });
     }
   }
@@ -85,23 +100,38 @@ class PullRequestWebhook {
       // Add web URL to the resource object
       resource.webUrl = azureDevOpsClient.constructPullRequestWebUrl(resource);
 
-      // Check if this is a reviewer assignment
-      const isReviewerAssignment = this.isReviewerAssignment(resource);
+      // Route through agent orchestrator
+      const result = await agentOrchestrator.processWebhookEvent('pull-request-updated', req.body);
       
-      if (isReviewerAssignment) {
-        const newReviewers = this.getNewReviewers(resource);
-        const message = markdownFormatter.formatPullRequestReviewerAssigned(resource, newReviewers);
-        await notificationService.sendNotification(message, 'pull-request-reviewer-assigned');
+      if (result.success) {
+        res.json({
+          message: 'Pull request updated webhook processed successfully',
+          pullRequestId,
+          taskId: result.taskId,
+          timestamp: new Date().toISOString()
+        });
       } else {
-        const message = markdownFormatter.formatPullRequestUpdated(resource);
-        await notificationService.sendNotification(message, 'pull-request-updated');
+        // Fallback to direct processing if agent fails
+        logger.warn('Agent processing failed, falling back to direct processing', { error: result.error });
+        
+        // Check if this is a reviewer assignment
+        const isReviewerAssignment = this.isReviewerAssignment(resource);
+        
+        if (isReviewerAssignment) {
+          const newReviewers = this.getNewReviewers(resource);
+          const message = markdownFormatter.formatPullRequestReviewerAssigned(resource, newReviewers);
+          await notificationService.sendNotification(message, 'pull-request-reviewer-assigned');
+        } else {
+          const message = markdownFormatter.formatPullRequestUpdated(resource);
+          await notificationService.sendNotification(message, 'pull-request-updated');
+        }
+        
+        res.json({
+          message: 'Pull request updated webhook processed successfully (fallback)',
+          pullRequestId,
+          timestamp: new Date().toISOString()
+        });
       }
-      
-      res.json({
-        message: 'Pull request updated webhook processed successfully',
-        pullRequestId,
-        timestamp: new Date().toISOString()
-      });
 
     } catch (error) {
       logger.error('Error processing pull request updated webhook:', error);

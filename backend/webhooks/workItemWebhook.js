@@ -2,6 +2,7 @@ import { logger } from '../utils/logger.js';
 import { aiService } from '../ai/aiService.js';
 import { notificationService } from '../notifications/notificationService.js';
 import { markdownFormatter } from '../utils/markdownFormatter.js';
+import { agentOrchestrator } from '../agent/agentOrchestrator.js';
 
 class WorkItemWebhook {
   async handleCreated(req, res) {
@@ -19,20 +20,30 @@ class WorkItemWebhook {
         assignedTo: resource.fields?.['System.AssignedTo']?.displayName
       });
 
-      // Generate AI summary of the work item
-      const aiSummary = await aiService.summarizeWorkItem(resource);
+      // Route through agent orchestrator
+      const result = await agentOrchestrator.processWebhookEvent('work-item-created', req.body);
       
-      // Format notification message
-      const message = markdownFormatter.formatWorkItemCreated(resource, aiSummary);
-      
-      // Send notification
-      await notificationService.sendNotification(message, 'work-item-created');
-      
-      res.json({
-        message: 'Work item created webhook processed successfully',
-        workItemId: resource.id,
-        timestamp: new Date().toISOString()
-      });
+      if (result.success) {
+        res.json({
+          message: 'Work item created webhook processed successfully',
+          workItemId: resource.id,
+          taskId: result.taskId,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        // Fallback to direct processing if agent fails
+        logger.warn('Agent processing failed, falling back to direct processing', { error: result.error });
+        
+        const aiSummary = await aiService.summarizeWorkItem(resource);
+        const message = markdownFormatter.formatWorkItemCreated(resource, aiSummary);
+        await notificationService.sendNotification(message, 'work-item-created');
+        
+        res.json({
+          message: 'Work item created webhook processed successfully (fallback)',
+          workItemId: resource.id,
+          timestamp: new Date().toISOString()
+        });
+      }
 
     } catch (error) {
       logger.error('Error processing work item created webhook:', error);
@@ -71,17 +82,29 @@ class WorkItemWebhook {
         eventType: webhookData.eventType
       });
 
-      // Format notification message with complete webhook data
-      const message = markdownFormatter.formatWorkItemUpdated(webhookData);
+      // Route through agent orchestrator
+      const result = await agentOrchestrator.processWebhookEvent('work-item-updated', webhookData);
       
-      // Send notification
-      await notificationService.sendNotification(message, 'work-item-updated');
-      
-      res.json({
-        message: 'Work item updated webhook processed successfully',
-        workItemId,
-        timestamp: new Date().toISOString()
-      });
+      if (result.success) {
+        res.json({
+          message: 'Work item updated webhook processed successfully',
+          workItemId,
+          taskId: result.taskId,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        // Fallback to direct processing if agent fails
+        logger.warn('Agent processing failed, falling back to direct processing', { error: result.error });
+        
+        const message = markdownFormatter.formatWorkItemUpdated(webhookData);
+        await notificationService.sendNotification(message, 'work-item-updated');
+        
+        res.json({
+          message: 'Work item updated webhook processed successfully (fallback)',
+          workItemId,
+          timestamp: new Date().toISOString()
+        });
+      }
 
     } catch (error) {
       logger.error('Error processing work item updated webhook:', error);

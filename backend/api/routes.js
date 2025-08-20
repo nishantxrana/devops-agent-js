@@ -4,6 +4,7 @@ import { azureDevOpsClient } from '../devops/azureDevOpsClient.js';
 import { aiService } from '../ai/aiService.js';
 import { configLoader } from '../config/settings.js';
 import { AI_MODELS, getModelsForProvider, getDefaultModel } from '../config/aiModels.js';
+import { agentOrchestrator } from '../agent/agentOrchestrator.js';
 
 const router = express.Router();
 
@@ -300,6 +301,79 @@ router.get('/ai/config', (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch AI configuration'
+    });
+  }
+});
+
+// Agent endpoints
+router.get('/agent/status', (req, res) => {
+  try {
+    const status = agentOrchestrator.getStatus();
+    res.json({
+      success: true,
+      status
+    });
+  } catch (error) {
+    logger.error('Error fetching agent status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch agent status'
+    });
+  }
+});
+
+router.get('/agent/reasoning', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const reasoning = agentOrchestrator.getReasoningHistory(limit);
+    res.json({
+      success: true,
+      reasoning
+    });
+  } catch (error) {
+    logger.error('Error fetching agent reasoning:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch agent reasoning'
+    });
+  }
+});
+
+router.get('/agent/tasks/history', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const history = agentOrchestrator.getTaskHistory(limit);
+    res.json({
+      success: true,
+      history
+    });
+  } catch (error) {
+    logger.error('Error fetching task history:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch task history'
+    });
+  }
+});
+
+router.post('/agent/tasks/manual', async (req, res) => {
+  try {
+    const { type, description, parameters = {} } = req.body;
+    
+    if (!type || !description) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: type and description'
+      });
+    }
+
+    const result = await agentOrchestrator.executeManualTask(type, description, parameters);
+    res.json(result);
+  } catch (error) {
+    logger.error('Error executing manual task:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to execute manual task'
     });
   }
 });

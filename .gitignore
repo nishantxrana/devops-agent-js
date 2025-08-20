@@ -97,3 +97,6 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Agent memory data
+backend/data/

@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger.js';
 import { azureDevOpsClient } from '../devops/azureDevOpsClient.js';
+import { agentOrchestrator } from '../agent/agentOrchestrator.js';
 
 class BuildPoller {
   constructor() {
@@ -11,35 +12,43 @@ class BuildPoller {
     try {
       logger.info('Starting builds polling');
 
-      // Get recent builds
-      const recentBuilds = await azureDevOpsClient.getRecentBuilds(20);
-      
-      if (recentBuilds.count > 0) {
-        logger.info(`Found ${recentBuilds.count} recent builds`);
-        
-        // Filter builds that completed since last poll
-        const newBuilds = recentBuilds.value.filter(build => {
-          const finishTime = new Date(build.finishTime);
-          return finishTime > this.lastPollTime && !this.processedBuilds.has(build.id);
-        });
+      // Route through agent orchestrator
+      const result = await agentOrchestrator.processPollingEvent('builds', {
+        timestamp: new Date().toISOString(),
+        lastPollTime: this.lastPollTime
+      });
 
-        if (newBuilds.length > 0) {
-          logger.info(`Found ${newBuilds.length} new completed builds since last poll`);
-          
-          for (const build of newBuilds) {
-            await this.processBuild(build);
-            this.processedBuilds.add(build.id);
-          }
-        }
+      if (result.success) {
+        logger.info('Builds polling processed by agent', { taskId: result.taskId });
       } else {
-        logger.info('No recent builds found');
+        // Fallback to direct processing
+        logger.warn('Agent polling failed, falling back to direct processing', { error: result.error });
+        
+        // Get recent builds
+        const recentBuilds = await azureDevOpsClient.getRecentBuilds(20);
+        
+        if (recentBuilds.count > 0) {
+          logger.info(`Found ${recentBuilds.count} recent builds`);
+          
+          // Filter builds that completed since last poll
+          const newBuilds = recentBuilds.value.filter(build => {
+            const finishTime = new Date(build.finishTime);
+            return finishTime > this.lastPollTime && !this.processedBuilds.has(build.id);
+          });
+
+          if (newBuilds.length > 0) {
+            logger.info(`Found ${newBuilds.length} new completed builds since last poll`);
+            
+            for (const build of newBuilds) {
+              await this.processBuild(build);
+            }
+          }
+        } else {
+          logger.info('No recent builds found');
+        }
       }
 
       this.lastPollTime = new Date();
-      
-      // Clean up processed builds set to prevent memory leaks
-      this.cleanupProcessedBuilds();
-      
     } catch (error) {
       logger.error('Error polling builds:', error);
     }
@@ -59,6 +68,9 @@ class BuildPoller {
       
       // For now, we'll just log the build information
       // The actual notification logic is handled in the webhook handlers
+      
+      // Mark as processed
+      this.processedBuilds.add(build.id);
       
     } catch (error) {
       logger.error(`Error processing build ${build.id}:`, error);

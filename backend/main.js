@@ -9,6 +9,7 @@ import { webhookRoutes } from './webhooks/routes.js';
 import { apiRoutes } from './api/routes.js';
 import { startPollingJobs } from './polling/index.js';
 import { errorHandler } from './utils/errorHandler.js';
+import { agentOrchestrator } from './agent/agentOrchestrator.js';
 
 // Load environment variables first
 config();
@@ -65,13 +66,15 @@ app.use('*', (req, res) => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  await agentOrchestrator.shutdown();
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
+  await agentOrchestrator.shutdown();
   process.exit(0);
 });
 
@@ -80,6 +83,10 @@ app.listen(PORT, async () => {
   logger.info(`Azure DevOps Monitoring Agent Backend started on port ${PORT}`);
   
   try {
+    // Initialize agent orchestrator first
+    await agentOrchestrator.initialize();
+    logger.info('Agent orchestrator initialized');
+    
     // Validate configuration (but don't fail if Azure DevOps is not configured yet)
     let configValid = false;
     try {
