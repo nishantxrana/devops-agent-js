@@ -3,11 +3,24 @@ import Groq from 'groq-sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logger } from '../utils/logger.js';
 import { configLoader } from '../config/settings.js';
+import { agenticAIService } from './agenticService.js';
 
 class AIService {
   constructor() {
     this.client = null;
     this.initialized = false;
+    this.agenticMode = false; // Flag to enable agentic capabilities
+  }
+
+  // Enable agentic mode for enhanced AI capabilities
+  enableAgenticMode() {
+    this.agenticMode = true;
+    logger.info('Agentic mode enabled for AI service');
+  }
+
+  disableAgenticMode() {
+    this.agenticMode = false;
+    logger.info('Agentic mode disabled for AI service');
   }
 
   initializeClient() {
@@ -94,8 +107,18 @@ class AIService {
     }
   }
 
-  async summarizeWorkItem(workItem) {
+  async summarizeWorkItem(workItem, sessionId = 'work_items') {
     try {
+      // Try agentic mode first if enabled
+      if (this.agenticMode) {
+        try {
+          const result = await agenticAIService.summarizeWithContext('work_item', workItem, sessionId);
+          return result.response;
+        } catch (error) {
+          logger.warn('Agentic mode failed, falling back to standard mode:', error);
+        }
+      }
+
       if (!this.initialized) {
         try {
           this.initializeClient();
@@ -247,8 +270,24 @@ Provide a concise explanation (3-5 sentences max) based on this data.`
     }
   }
 
-  async summarizeBuildFailure(build, timeline, logs) {
+  async summarizeBuildFailure(build, timeline, logs, sessionId = 'build_failures') {
     try {
+      // Try agentic mode first if enabled
+      if (this.agenticMode) {
+        try {
+          const buildData = {
+            build,
+            timeline,
+            logs,
+            historicalData: await this.getHistoricalBuildData(build) // We'll need to implement this
+          };
+          const result = await agenticAIService.summarizeWithContext('build_failure', buildData, sessionId);
+          return result.response;
+        } catch (error) {
+          logger.warn('Agentic mode failed for build failure, falling back to standard mode:', error);
+        }
+      }
+
       if (!this.initialized) {
         try {
           this.initializeClient();
@@ -663,6 +702,80 @@ Do NOT repeat the raw data - focus on analysis and actionable insights only.`
     } catch (error) {
       logger.error('Error generating sprint insights:', error);
       return 'Unable to generate sprint insights at this time.';
+    }
+  }
+
+  // Helper method for agentic mode - get historical build data
+  async getHistoricalBuildData(build) {
+    // This would typically fetch from a database of historical builds
+    // For now, return empty array - this can be enhanced later
+    return [];
+  }
+
+  // New agentic methods
+  async processAgenticQuery(query, sessionId = 'default', context = {}) {
+    try {
+      if (!this.agenticMode) {
+        throw new Error('Agentic mode is not enabled');
+      }
+
+      const result = await agenticAIService.processQuery(query, sessionId, context);
+      return result;
+    } catch (error) {
+      logger.error('Error processing agentic query:', error);
+      throw error;
+    }
+  }
+
+  async getProactiveInsights(metrics, sessionId = 'team_insights') {
+    try {
+      if (!this.agenticMode) {
+        // Fallback to basic insights if agentic mode is disabled
+        return this.generateBasicInsights(metrics);
+      }
+
+      const result = await agenticAIService.getProactiveInsights(metrics, sessionId);
+      return result.response;
+    } catch (error) {
+      logger.error('Error generating proactive insights:', error);
+      return 'Unable to generate proactive insights at this time.';
+    }
+  }
+
+  generateBasicInsights(metrics) {
+    const insights = [];
+    
+    if (metrics.buildSuccessRate < 0.8) {
+      insights.push('Build success rate is below 80%. Consider improving test coverage and code review processes.');
+    }
+    
+    if (metrics.averageLeadTime > 7) {
+      insights.push('Average lead time exceeds 7 days. Consider optimizing development workflow.');
+    }
+    
+    if (metrics.deploymentFrequency < 1) {
+      insights.push('Low deployment frequency detected. Consider implementing continuous deployment practices.');
+    }
+    
+    return insights.length > 0 ? insights.join(' ') : 'Team performance metrics look good!';
+  }
+
+  // Method to initialize agentic capabilities based on configuration
+  async initializeAgenticCapabilities() {
+    try {
+      const config = configLoader.getAIConfig();
+      
+      // Only enable agentic mode for providers that support it
+      if (config.provider === 'openai' || config.provider === 'gemini') {
+        this.enableAgenticMode();
+        await agenticAIService.initialize();
+        logger.info('Agentic capabilities initialized successfully');
+      } else {
+        logger.info(`Agentic mode not available for provider: ${config.provider}`);
+      }
+    } catch (error) {
+      logger.warn('Failed to initialize agentic capabilities:', error);
+      this.disableAgenticMode();
     }
   }
 }

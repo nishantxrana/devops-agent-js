@@ -426,4 +426,119 @@ router.get('/ai/config', (req, res) => {
   }
 });
 
+// Agentic AI endpoints
+router.post('/ai/agentic/query', async (req, res) => {
+  try {
+    const { query, sessionId = 'default', context = {} } = req.body;
+    
+    if (!query) {
+      return res.status(400).json({
+        success: false,
+        error: 'Query is required'
+      });
+    }
+
+    const result = await aiService.processAgenticQuery(query, sessionId, context);
+    
+    res.json({
+      success: true,
+      response: result.response,
+      context: result.context,
+      toolsUsed: result.toolsUsed
+    });
+  } catch (error) {
+    logger.error('Error processing agentic query:', error);
+    
+    if (error.message.includes('not enabled')) {
+      res.status(400).json({
+        success: false,
+        error: 'Agentic mode is not enabled. Please enable it in AI settings.'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to process agentic query'
+      });
+    }
+  }
+});
+
+router.post('/ai/agentic/insights', async (req, res) => {
+  try {
+    const { metrics, sessionId = 'team_insights' } = req.body;
+    
+    if (!metrics) {
+      return res.status(400).json({
+        success: false,
+        error: 'Metrics are required'
+      });
+    }
+
+    const insights = await aiService.getProactiveInsights(metrics, sessionId);
+    
+    res.json({
+      success: true,
+      insights
+    });
+  } catch (error) {
+    logger.error('Error generating proactive insights:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate proactive insights'
+    });
+  }
+});
+
+router.post('/ai/agentic/enable', async (req, res) => {
+  try {
+    await aiService.initializeAgenticCapabilities();
+    
+    res.json({
+      success: true,
+      message: 'Agentic mode enabled successfully',
+      agenticEnabled: aiService.agenticMode
+    });
+  } catch (error) {
+    logger.error('Error enabling agentic mode:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to enable agentic mode'
+    });
+  }
+});
+
+router.post('/ai/agentic/disable', (req, res) => {
+  try {
+    aiService.disableAgenticMode();
+    
+    res.json({
+      success: true,
+      message: 'Agentic mode disabled successfully',
+      agenticEnabled: aiService.agenticMode
+    });
+  } catch (error) {
+    logger.error('Error disabling agentic mode:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to disable agentic mode'
+    });
+  }
+});
+
+router.get('/ai/agentic/status', (req, res) => {
+  try {
+    res.json({
+      success: true,
+      agenticEnabled: aiService.agenticMode,
+      initialized: aiService.initialized
+    });
+  } catch (error) {
+    logger.error('Error getting agentic status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get agentic status'
+    });
+  }
+});
+
 export { router as apiRoutes };
