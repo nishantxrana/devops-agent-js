@@ -5,6 +5,7 @@ import { aiService } from '../ai/aiService.js';
 import { configLoader } from '../config/settings.js';
 import { AI_MODELS, getModelsForProvider, getDefaultModel } from '../config/aiModels.js';
 import { filterActiveWorkItems, filterCompletedWorkItems } from '../utils/workItemStates.js';
+import agentRoutes from './agentRoutes.js';
 
 const router = express.Router();
 
@@ -425,5 +426,8 @@ router.get('/ai/config', (req, res) => {
     });
   }
 });
+
+// Mount agent routes
+router.use('/agent', agentRoutes);
 
 export { router as apiRoutes };

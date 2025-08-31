@@ -133,6 +133,42 @@ export const apiService = {
   async testConnection() {
     const response = await api.post('/settings/test-connection')
     return response.data
+  },
+
+  // Agent functionality
+  async chatWithAgent(payload) {
+    const response = await api.post('/agent/chat', payload)
+    return response.data
+  },
+
+  async getAgentStatus() {
+    const response = await api.get('/agent/status')
+    return response.data
+  },
+
+  async getAgentHealth() {
+    const response = await api.get('/agent/health')
+    return response.data
+  },
+
+  async getConversations(userId = 'default') {
+    const response = await api.get('/agent/conversations', { params: { userId } })
+    return response.data
+  },
+
+  async getConversation(conversationId, userId = 'default') {
+    const response = await api.get(`/agent/conversations/${conversationId}`, { params: { userId } })
+    return response.data
+  },
+
+  async executeAutonomousWorkflow(trigger, data) {
+    const response = await api.post('/agent/workflow', { trigger, data })
+    return response.data
+  },
+
+  async initializeAgent() {
+    const response = await api.post('/agent/initialize')
+    return response.data
   }
 }
 

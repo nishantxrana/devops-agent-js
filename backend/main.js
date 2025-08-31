@@ -9,6 +9,8 @@ import { webhookRoutes } from './webhooks/routes.js';
 import { apiRoutes } from './api/routes.js';
 import { startPollingJobs } from './polling/index.js';
 import { errorHandler } from './utils/errorHandler.js';
+import { devOpsAgent } from './ai/agentSystem.js';
+import { autonomousScheduler } from './ai/autonomousScheduler.js';
 
 // Load environment variables first
 config();
@@ -67,11 +69,13 @@ app.use('*', (req, res) => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  autonomousScheduler.stop();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully');
+  autonomousScheduler.stop();
   process.exit(0);
 });
 
@@ -94,8 +98,21 @@ app.listen(PORT, async () => {
     if (configValid && process.env.AZURE_DEVOPS_ORG && process.env.AZURE_DEVOPS_PROJECT && process.env.AZURE_DEVOPS_PAT) {
       startPollingJobs();
       logger.info('Polling jobs started');
+      
+      // Initialize and start autonomous agent system
+      try {
+        await devOpsAgent.initialize();
+        autonomousScheduler.start();
+        logger.info('Autonomous agent system started');
+      } catch (agentError) {
+        logger.error('Failed to start autonomous agent system:', agentError);
+        // Don't fail the app if agent fails in development
+        if (process.env.NODE_ENV === 'production') {
+          throw agentError;
+        }
+      }
     } else {
-      logger.info('Polling jobs not started - Azure DevOps configuration incomplete or invalid');
+      logger.info('Polling jobs and autonomous agent not started - Azure DevOps configuration incomplete or invalid');
     }
     
   } catch (error) {
