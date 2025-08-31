@@ -1,7 +1,7 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { MemorySaver } from '@langchain/langgraph';
-import { StateGraph, START, END } from '@langchain/langgraph';
+import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import { Tool } from '@langchain/core/tools';
 import { logger } from '../utils/logger.js';
@@ -177,16 +177,29 @@ class ProactiveMonitoringTool extends Tool {
   }
 }
 
-// Agent state definition
-class AgentState {
-  constructor() {
-    this.messages = [];
-    this.context = {};
-    this.memory = {};
-    this.tools_output = null;
-    this.next_action = null;
-  }
-}
+// Agent state definition using Annotation
+const AgentState = Annotation.Root({
+  messages: Annotation({
+    reducer: (x, y) => x.concat(y),
+    default: () => []
+  }),
+  context: Annotation({
+    reducer: (x, y) => ({ ...x, ...y }),
+    default: () => ({})
+  }),
+  memory: Annotation({
+    reducer: (x, y) => ({ ...x, ...y }),
+    default: () => ({})
+  }),
+  tools_output: Annotation({
+    reducer: (x, y) => y || x,
+    default: () => null
+  }),
+  next_action: Annotation({
+    reducer: (x, y) => y || x,
+    default: () => null
+  })
+});
 
 class AgenticAIService {
   constructor() {
@@ -384,9 +397,13 @@ class AgenticAIService {
     try {
       await this.initialize();
       
-      const initialState = new AgentState();
-      initialState.messages = [new HumanMessage(query)];
-      initialState.context = { ...additionalContext };
+      const initialState = {
+        messages: [new HumanMessage(query)],
+        context: { ...additionalContext },
+        memory: {},
+        tools_output: null,
+        next_action: null
+      };
       
       // Load memory for this session
       const sessionMemory = await this.loadSessionMemory(sessionId);

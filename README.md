@@ -1,8 +1,16 @@
 # Azure DevOps Monitoring Agent
 
-An AI-powered monitoring and automation platform for Azure DevOps that provides intelligent insights, automated notifications, and enhanced development workflows through multiple AI providers.
+An AI-powered monitoring and automation platform for Azure DevOps that provides intelligent insights, automated notifications, and enhanced development workflows through multiple AI providers. **Now featuring advanced agentic AI capabilities with memory, reasoning, and proactive insights.**
 
 ## 🚀 Features
+
+### 🧠 Agentic AI System (NEW!)
+- **Context-Aware Conversations**: AI agent with persistent memory across sessions
+- **Multi-Step Reasoning**: Complex DevOps analysis through intelligent workflows
+- **Proactive Insights**: Automatic recommendations based on team performance metrics
+- **DevOps-Specific Tools**: Specialized analysis for builds, work items, and pull requests
+- **Learning Capabilities**: Agent learns from past interactions and patterns
+- **Session Management**: Persistent context retention with configurable timeouts
 
 ### Multi-Provider AI Integration
 - **OpenAI GPT Models**: GPT-3.5-turbo, GPT-4, GPT-4-turbo
@@ -30,15 +38,23 @@ An AI-powered monitoring and automation platform for Azure DevOps that provides 
 - **Build Failure Analysis**: Intelligent analysis of pipeline failures
 - **Pull Request Insights**: Idle PR detection and review recommendations
 
+### 🎨 Enhanced Frontend (NEW!)
+- **Agent Chat Interface**: Beautiful floating chat window for natural AI conversations
+- **Dark/Light Theme**: Smooth theme switching with CSS transitions
+- **Modern Dashboard**: Professional UI with agentic insights panel
+- **Responsive Design**: Optimized for all device sizes
+- **Loading States**: Professional animations and progress indicators
+
 ## 🏗️ Architecture
 
 ### Backend Components
 ```
 backend/
 ├── ai/                     # AI service integration
-│   └── aiService.js       # Multi-provider AI client management
+│   ├── aiService.js       # Multi-provider AI client management
+│   └── agenticService.js  # Agentic AI workflows with LangChain/LangGraph
 ├── api/                   # REST API endpoints
-│   └── routes.js         # Main API routes
+│   └── routes.js         # Main API routes (includes agentic endpoints)
 ├── config/               # Configuration management
 │   ├── settings.js       # Application settings and validation
 │   ├── aiModels.js      # AI model configurations

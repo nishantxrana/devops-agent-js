@@ -9,6 +9,7 @@ import { webhookRoutes } from './webhooks/routes.js';
 import { apiRoutes } from './api/routes.js';
 import { startPollingJobs } from './polling/index.js';
 import { errorHandler } from './utils/errorHandler.js';
+import { aiService } from './ai/aiService.js';
 
 // Load environment variables first
 config();
@@ -96,6 +97,14 @@ app.listen(PORT, async () => {
       logger.info('Polling jobs started');
     } else {
       logger.info('Polling jobs not started - Azure DevOps configuration incomplete or invalid');
+    }
+
+    // Initialize agentic AI capabilities if possible
+    try {
+      await aiService.initializeAgenticCapabilities();
+      logger.info('Agentic AI capabilities initialization attempted');
+    } catch (error) {
+      logger.warn('Agentic AI capabilities not available:', error.message);
     }
     
   } catch (error) {
