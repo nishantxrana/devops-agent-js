@@ -15,7 +15,9 @@ import {
   Shield,
   Database,
   Webhook,
-  Bot
+  Bot,
+  Brain,
+  Sparkles
 } from 'lucide-react'
 import { apiService } from '../api/apiService'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -29,6 +31,7 @@ export default function Settings() {
   const [testResult, setTestResult] = useState(null)
   const [activeTab, setActiveTab] = useState('azure')
   const [validationErrors, setValidationErrors] = useState({})
+  const [agenticStatus, setAgenticStatus] = useState({ enabled: false, initialized: false })
   const { isConnected, healthData } = useHealth()
   
   const [settings, setSettings] = useState({
@@ -62,6 +65,13 @@ export default function Settings() {
       apiToken: '',
       enableRateLimit: true,
       maxRequestsPerMinute: 100
+    },
+    agentic: {
+      enabled: false,
+      contextRetention: true,
+      proactiveInsights: true,
+      maxMemorySize: 100,
+      sessionTimeout: 24
     }
   })
 
@@ -97,6 +107,7 @@ export default function Settings() {
   const tabs = [
     { id: 'azure', name: 'Azure DevOps', icon: Database },
     { id: 'ai', name: 'AI Configuration', icon: Bot },
+    { id: 'agentic', name: 'Agentic Mode', icon: Brain },
     { id: 'notifications', name: 'Notifications', icon: Bell },
     { id: 'polling', name: 'Polling', icon: Clock },
     { id: 'security', name: 'Security', icon: Shield }
@@ -190,10 +201,44 @@ export default function Settings() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Azure DevOps Configuration */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Azure DevOps Configuration</h3>
+      {/* Navigation Tabs */}
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <nav className="-mb-px flex space-x-8">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            const isActive = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  isActive
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.name}
+                {tab.id === 'agentic' && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                    New
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      <div className="space-y-6">
+        {activeTab === 'azure' && (
+          <div className="grid grid-cols-1 gap-6">
+            <div className="card">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <Database className="h-5 w-5 text-blue-500" />
+                Azure DevOps Configuration
+              </h3>
           <div className="space-y-4">
             <div>
               <label className="label">Organization</label>

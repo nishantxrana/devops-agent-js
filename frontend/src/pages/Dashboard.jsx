@@ -8,7 +8,14 @@ import {
   Clock,
   Users,
   Activity,
-  RefreshCw
+  RefreshCw,
+  Brain,
+  Zap,
+  Target,
+  BarChart3,
+  Lightbulb,
+  ChevronRight,
+  Sparkles
 } from 'lucide-react'
 import { apiService } from '../api/apiService'
 import { useHealth } from '../contexts/HealthContext'
@@ -22,7 +29,8 @@ export default function Dashboard() {
     workItems: true,
     builds: true,
     pullRequests: true,
-    logs: true
+    logs: true,
+    agenticInsights: true
   })
   const [error, setError] = useState(null)
   const [stats, setStats] = useState({
@@ -31,11 +39,55 @@ export default function Dashboard() {
     pullRequests: { total: 0, active: 0, idle: 0 }
   })
   const [recentActivity, setRecentActivity] = useState([])
+  const [agenticInsights, setAgenticInsights] = useState(null)
+  const [agenticEnabled, setAgenticEnabled] = useState(false)
   const { isConnected, isChecking, healthData, lastCheck } = useHealth()
 
   useEffect(() => {
     loadDashboardData()
+    checkAgenticStatus()
   }, [])
+
+  const checkAgenticStatus = async () => {
+    try {
+      const response = await apiService.request('/ai/agentic/status')
+      setAgenticEnabled(response.agenticEnabled)
+      
+      if (response.agenticEnabled) {
+        loadAgenticInsights()
+      }
+    } catch (error) {
+      console.error('Error checking agentic status:', error)
+    }
+  }
+
+  const loadAgenticInsights = async () => {
+    try {
+      setLoadingStates(prev => ({ ...prev, agenticInsights: true }))
+      
+      // Calculate metrics for proactive insights
+      const metrics = {
+        buildSuccessRate: stats.builds.total > 0 ? stats.builds.succeeded / stats.builds.total : 1,
+        deploymentFrequency: 2, // Mock data - would come from real metrics
+        averageLeadTime: 5, // Mock data
+        overdueItemsCount: stats.workItems.overdue
+      }
+
+      const response = await apiService.request('/ai/agentic/insights', {
+        method: 'POST',
+        data: { 
+          metrics,
+          sessionId: 'dashboard_insights'
+        }
+      })
+      
+      setAgenticInsights(response.insights)
+    } catch (error) {
+      console.error('Error loading agentic insights:', error)
+    } finally {
+      setLoadingStates(prev => ({ ...prev, agenticInsights: false }))
+    }
+  }
 
   const loadDashboardData = async () => {
     try {
@@ -45,7 +97,8 @@ export default function Dashboard() {
         workItems: true,
         builds: true,
         pullRequests: true,
-        logs: true
+        logs: true,
+        agenticInsights: agenticEnabled
       })
 
       // Phase 1: Load critical work items data first (fastest)
@@ -108,6 +161,11 @@ export default function Dashboard() {
       }
       setLoadingStates(prev => ({ ...prev, logs: false }))
 
+      // Load agentic insights if enabled
+      if (agenticEnabled) {
+        setTimeout(loadAgenticInsights, 500) // Small delay to let stats update first
+      }
+
     } catch (err) {
       setError('Failed to load dashboard data')
       console.error('Dashboard error:', err)
@@ -116,7 +174,8 @@ export default function Dashboard() {
         workItems: false,
         builds: false,
         pullRequests: false,
-        logs: false
+        logs: false,
+        agenticInsights: false
       })
     }
   }
@@ -258,6 +317,105 @@ export default function Dashboard() {
           )
         })}
       </div>
+
+      {/* AI Agent Insights */}
+      {agenticEnabled && (
+        <div className="card bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-purple-200 dark:border-purple-700">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-r from-purple-500 to-blue-600 rounded-lg">
+                <Brain className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">AI Agent Insights</h3>
+                <p className="text-sm text-purple-600 dark:text-purple-300">Proactive recommendations from your intelligent assistant</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+              <span className="text-xs font-medium text-purple-600 dark:text-purple-300">AGENTIC MODE</span>
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            {loadingStates.agenticInsights ? (
+              <div className="flex items-center gap-3 p-4 bg-white/50 dark:bg-gray-800/50 rounded-xl">
+                <Sparkles className="h-5 w-5 text-purple-500 animate-spin" />
+                <div className="flex-1">
+                  <div className="h-4 bg-purple-200 dark:bg-purple-700 rounded w-3/4 mb-2 animate-pulse"></div>
+                  <div className="h-3 bg-purple-100 dark:bg-purple-800 rounded w-1/2 animate-pulse"></div>
+                </div>
+              </div>
+            ) : agenticInsights ? (
+              <div className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl p-4 border border-purple-100 dark:border-purple-800">
+                <div className="flex items-start gap-3">
+                  <Lightbulb className="h-5 w-5 text-purple-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
+                      {agenticInsights}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <Brain className="h-8 w-8 text-purple-300 mx-auto mb-2" />
+                <p className="text-sm text-purple-600 dark:text-purple-300">
+                  AI insights will appear here based on your team's performance metrics
+                </p>
+              </div>
+            )}
+            
+            {/* Action items from AI */}
+            {agenticInsights && (
+              <div className="flex items-center justify-between pt-3 border-t border-purple-100 dark:border-purple-800">
+                <span className="text-xs text-purple-600 dark:text-purple-300 font-medium">
+                  💡 Want more detailed analysis? Ask the AI agent about specific areas
+                </span>
+                <ChevronRight className="h-4 w-4 text-purple-400" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Agentic Mode Activation Banner */}
+      {!agenticEnabled && (
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-6">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex-shrink-0">
+              <Zap className="h-6 w-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Unlock Intelligent DevOps Insights
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                Enable agentic mode to get proactive recommendations, context-aware analysis, and intelligent automation 
+                suggestions powered by advanced AI reasoning.
+              </p>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full">
+                  <Target className="h-3 w-3" /> Smart Analysis
+                </span>
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium rounded-full">
+                  <BarChart3 className="h-3 w-3" /> Proactive Insights
+                </span>
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-medium rounded-full">
+                  <Brain className="h-3 w-3" /> Memory & Context
+                </span>
+              </div>
+              <button 
+                onClick={checkAgenticStatus}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-sm font-medium rounded-lg transition-all duration-200 transform hover:scale-105"
+              >
+                <Brain className="h-4 w-4" />
+                Enable Agentic Mode
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
