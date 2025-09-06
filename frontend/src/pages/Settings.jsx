@@ -15,21 +15,123 @@ import {
   Shield,
   Database,
   Webhook,
-  Bot
+  Bot,
+  HelpCircle,
+  ExternalLink
 } from 'lucide-react'
 import { apiService } from '../api/apiService'
-import LoadingSpinner from '../components/LoadingSpinner'
 import { useHealth } from '../contexts/HealthContext'
+import { useToast } from '@/hooks/use-toast'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
+
+function ConnectionStatus({ isConnected, isChecking }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className={cn(
+        "h-2 w-2 rounded-full",
+        isConnected ? "bg-green-500" : "bg-red-500"
+      )} />
+      <span className="text-sm">
+        {isChecking ? 'Checking...' : isConnected ? 'Connected' : 'Disconnected'}
+      </span>
+      <Badge variant={isConnected ? "default" : "destructive"}>
+        {isConnected ? 'Healthy' : 'Offline'}
+      </Badge>
+    </div>
+  )
+}
+
+function SecretInput({ label, description, value, onChange, placeholder, type = "password" }) {
+  const [isVisible, setIsVisible] = useState(false)
+  
+  return (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-2">
+        {label}
+        {description && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{description}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </Label>
+      <div className="relative">
+        <Input
+          type={isVisible ? "text" : type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="pr-10"
+        />
+        {type === "password" && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+            onClick={() => setIsVisible(!isVisible)}
+          >
+            {isVisible ? (
+              <EyeOff className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <Eye className="h-4 w-4 text-muted-foreground" />
+            )}
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CronInput({ label, value, onChange, examples }) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="0 */2 * * *"
+        className="font-mono"
+      />
+      {examples && (
+        <div className="text-xs space-y-1">
+          <div className="text-muted-foreground">Examples:</div>
+          {examples.map((example, idx) => (
+            <div key={idx} className="text-muted-foreground">
+              <code className="bg-muted px-1 rounded">{example.pattern}</code> - {example.description}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Settings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
-  const [showSecrets, setShowSecrets] = useState({})
   const [testResult, setTestResult] = useState(null)
-  const [activeTab, setActiveTab] = useState('azure')
-  const [validationErrors, setValidationErrors] = useState({})
   const { isConnected, healthData } = useHealth()
+  const { toast } = useToast()
   
   const [settings, setSettings] = useState({
     azureDevOps: {
@@ -46,61 +148,18 @@ export default function Settings() {
       model: 'gpt-3.5-turbo'
     },
     notifications: {
+      enabled: true,
       teamsWebhookUrl: '',
       slackWebhookUrl: '',
-      googleChatWebhookUrl: '',
-      enabled: true
+      googleChatWebhookUrl: ''
     },
     polling: {
-      workItemsInterval: '*/15 * * * *',
-      pipelineInterval: '*/10 * * * *',
-      pullRequestInterval: '0 */2 * * *',
-      overdueCheckInterval: '0 9 * * *'
-    },
-    security: {
-      webhookSecret: '',
-      apiToken: '',
-      enableRateLimit: true,
-      maxRequestsPerMinute: 100
+      workItems: '*/15 * * * *',
+      pipelines: '*/10 * * * *',
+      pullRequests: '0 */2 * * *',
+      overdueCheck: '0 9 * * *'
     }
   })
-
-  const validateSettings = () => {
-    const errors = {}
-    
-    // Azure DevOps validation
-    if (!settings.azureDevOps.organization.trim()) {
-      errors.organization = 'Organization is required'
-    }
-    if (!settings.azureDevOps.project.trim()) {
-      errors.project = 'Project is required'
-    }
-    if (!settings.azureDevOps.personalAccessToken.trim()) {
-      errors.personalAccessToken = 'Personal Access Token is required'
-    }
-    
-    // AI validation
-    if (settings.ai.provider === 'openai' && !settings.ai.openaiApiKey.trim()) {
-      errors.openaiApiKey = 'OpenAI API Key is required when using OpenAI'
-    }
-    if (settings.ai.provider === 'groq' && !settings.ai.groqApiKey.trim()) {
-      errors.groqApiKey = 'Groq API Key is required when using Groq'
-    }
-    if (settings.ai.provider === 'gemini' && !settings.ai.geminiApiKey.trim()) {
-      errors.geminiApiKey = 'Gemini API Key is required when using Gemini'
-    }
-    
-    setValidationErrors(errors)
-    return Object.keys(errors).length === 0
-  }
-
-  const tabs = [
-    { id: 'azure', name: 'Azure DevOps', icon: Database },
-    { id: 'ai', name: 'AI Configuration', icon: Bot },
-    { id: 'notifications', name: 'Notifications', icon: Bell },
-    { id: 'polling', name: 'Polling', icon: Clock },
-    { id: 'security', name: 'Security', icon: Shield }
-  ]
 
   useEffect(() => {
     loadSettings()
@@ -110,360 +169,487 @@ export default function Settings() {
     try {
       setLoading(true)
       const data = await apiService.getSettings()
-      setSettings(data)
+      setSettings(prev => ({ ...prev, ...data }))
     } catch (error) {
       console.error('Failed to load settings:', error)
+      toast({
+        title: "Error loading settings",
+        description: "Could not load current settings. Using defaults.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSave = async () => {
-    if (!validateSettings()) {
-      setTestResult({ success: false, message: 'Please fix validation errors before saving.' })
-      return
-    }
-    
+  const saveSettings = async () => {
     try {
       setSaving(true)
       await apiService.updateSettings(settings)
-      setTestResult({ success: true, message: 'Settings saved successfully!' })
+      toast({
+        title: "Settings saved",
+        description: "Your configuration has been saved successfully.",
+      })
     } catch (error) {
-      setTestResult({ success: false, message: 'Failed to save settings: ' + error.message })
+      console.error('Failed to save settings:', error)
+      toast({
+        title: "Error saving settings",
+        description: "Failed to save settings. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setSaving(false)
     }
   }
 
-  const handleTestConnection = async () => {
+  const testConnection = async () => {
     try {
       setTesting(true)
-      const result = await apiService.testConnection()
-      setTestResult({ success: true, message: 'Connection test successful!' })
+      setTestResult(null)
+      
+      const result = await apiService.testConnection(settings.azureDevOps)
+      
+      setTestResult({
+        success: result.success,
+        message: result.message || (result.success ? 'Connection successful!' : 'Connection failed')
+      })
+      
+      toast({
+        title: result.success ? "Connection successful" : "Connection failed",
+        description: result.message,
+        variant: result.success ? "default" : "destructive",
+      })
     } catch (error) {
-      setTestResult({ success: false, message: 'Connection test failed: ' + error.message })
+      console.error('Connection test failed:', error)
+      setTestResult({
+        success: false,
+        message: 'Connection test failed. Please check your configuration.'
+      })
+      
+      toast({
+        title: "Connection test failed",
+        description: "Please check your Azure DevOps configuration.",
+        variant: "destructive",
+      })
     } finally {
       setTesting(false)
     }
   }
 
-  const toggleSecretVisibility = (field) => {
-    setShowSecrets(prev => ({
-      ...prev,
-      [field]: !prev[field]
-    }))
-  }
-
-  const updateSetting = (section, field, value) => {
+  const updateSetting = (category, field, value) => {
     setSettings(prev => ({
       ...prev,
-      [section]: {
-        ...prev[section],
+      [category]: {
+        ...prev[category],
         [field]: value
       }
     }))
   }
 
+  const cronExamples = {
+    workItems: [
+      { pattern: "*/15 * * * *", description: "Every 15 minutes" },
+      { pattern: "0 */1 * * *", description: "Every hour" }
+    ],
+    pipelines: [
+      { pattern: "*/10 * * * *", description: "Every 10 minutes" },
+      { pattern: "*/5 * * * *", description: "Every 5 minutes" }
+    ],
+    pullRequests: [
+      { pattern: "0 */2 * * *", description: "Every 2 hours" },
+      { pattern: "0 9,17 * * *", description: "At 9 AM and 5 PM" }
+    ],
+    overdueCheck: [
+      { pattern: "0 9 * * *", description: "Daily at 9 AM" },
+      { pattern: "0 9 * * 1-5", description: "Weekdays at 9 AM" }
+    ]
+  }
+
   if (loading) {
-    return <LoadingSpinner />
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <div className="h-8 w-48 bg-muted animate-pulse rounded" />
+          <div className="h-4 w-96 bg-muted animate-pulse rounded" />
+        </div>
+        <div className="grid gap-6">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <div className="h-5 w-32 bg-muted animate-pulse rounded" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {Array.from({ length: 3 }).map((_, j) => (
+                  <div key={j} className="space-y-2">
+                    <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+                    <div className="h-10 w-full bg-muted animate-pulse rounded" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
-        <p className="text-gray-600">Configure your Azure DevOps monitoring agent</p>
+    <div className="space-y-8">
+      {/* Page Header */}
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground">
+          Configure your Azure DevOps monitoring agent
+        </p>
+        <ConnectionStatus isConnected={isConnected} isChecking={false} />
       </div>
 
-      {/* Test Result */}
-      {testResult && (
-        <div className={`p-4 rounded-lg flex items-center space-x-2 ${
-          testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-        }`}>
-          {testResult.success ? (
-            <CheckCircle className="h-5 w-5" />
-          ) : (
-            <XCircle className="h-5 w-5" />
-          )}
-          <span>{testResult.message}</span>
-        </div>
-      )}
+      <Tabs defaultValue="azure" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="azure" className="flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Azure DevOps
+          </TabsTrigger>
+          <TabsTrigger value="ai" className="flex items-center gap-2">
+            <Bot className="h-4 w-4" />
+            AI Settings
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            Notifications
+          </TabsTrigger>
+          <TabsTrigger value="scheduling" className="flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            Scheduling
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Azure DevOps Configuration */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Azure DevOps Configuration</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="label">Organization</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.azureDevOps.organization}
-                onChange={(e) => updateSetting('azureDevOps', 'organization', e.target.value)}
-                placeholder="your-organization"
-              />
-            </div>
-            <div>
-              <label className="label">Project</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.azureDevOps.project}
-                onChange={(e) => updateSetting('azureDevOps', 'project', e.target.value)}
-                placeholder="your-project"
-              />
-            </div>
-            <div>
-              <label className="label">Personal Access Token</label>
-              <div className="relative">
-                <input
-                  type={showSecrets.pat ? 'text' : 'password'}
-                  className="input pr-10"
-                  value={settings.azureDevOps.personalAccessToken}
-                  onChange={(e) => updateSetting('azureDevOps', 'personalAccessToken', e.target.value)}
-                  placeholder="your-personal-access-token"
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => toggleSecretVisibility('pat')}
-                >
-                  {showSecrets.pat ? (
-                    <EyeOff className="h-4 w-4 text-gray-400" />
-                  ) : (
-                    <Eye className="h-4 w-4 text-gray-400" />
-                  )}
-                </button>
+        <TabsContent value="azure" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-5 w-5" />
+                Azure DevOps Configuration
+              </CardTitle>
+              <CardDescription>
+                Configure your Azure DevOps organization and authentication
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Organization</Label>
+                  <Input
+                    value={settings.azureDevOps.organization}
+                    onChange={(e) => updateSetting('azureDevOps', 'organization', e.target.value)}
+                    placeholder="your-organization"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Your Azure DevOps organization name
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Project</Label>
+                  <Input
+                    value={settings.azureDevOps.project}
+                    onChange={(e) => updateSetting('azureDevOps', 'project', e.target.value)}
+                    placeholder="your-project"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    The project to monitor
+                  </p>
+                </div>
               </div>
-            </div>
-            <div>
-              <label className="label">Base URL</label>
-              <input
-                type="url"
-                className="input"
-                value={settings.azureDevOps.baseUrl}
-                onChange={(e) => updateSetting('azureDevOps', 'baseUrl', e.target.value)}
-                placeholder="https://dev.azure.com"
+
+              <SecretInput
+                label="Personal Access Token"
+                description="Generate a PAT with Work Items (Read), Build (Read), and Code (Read) permissions"
+                value={settings.azureDevOps.personalAccessToken}
+                onChange={(value) => updateSetting('azureDevOps', 'personalAccessToken', value)}
+                placeholder="your-personal-access-token"
               />
-            </div>
-          </div>
-        </div>
+
+              <div className="space-y-2">
+                <Label>Base URL</Label>
+                <Input
+                  value={settings.azureDevOps.baseUrl}
+                  onChange={(e) => updateSetting('azureDevOps', 'baseUrl', e.target.value)}
+                  placeholder="https://dev.azure.com"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Azure DevOps base URL (usually https://dev.azure.com)
+                </p>
+              </div>
+
+              {testResult && (
+                <Alert variant={testResult.success ? "default" : "destructive"}>
+                  {testResult.success ? (
+                    <CheckCircle className="h-4 w-4" />
+                  ) : (
+                    <XCircle className="h-4 w-4" />
+                  )}
+                  <AlertTitle>
+                    {testResult.success ? 'Connection Successful' : 'Connection Failed'}
+                  </AlertTitle>
+                  <AlertDescription>{testResult.message}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="flex gap-2">
+                <Button 
+                  onClick={testConnection} 
+                  disabled={testing}
+                  variant="outline"
+                  className="gap-2"
+                >
+                  <TestTube className={cn("h-4 w-4", testing && "animate-spin")} />
+                  {testing ? 'Testing...' : 'Test Connection'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* AI Configuration */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">AI Configuration</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="label">AI Provider</label>
-              <select
-                className="input"
-                value={settings.ai.provider}
-                onChange={(e) => updateSetting('ai', 'provider', e.target.value)}
-              >
-                <option value="openai">OpenAI</option>
-                <option value="groq">Groq</option>
-                <option value="gemini">Google Gemini</option>
-              </select>
-            </div>
-            {settings.ai.provider === 'openai' && (
-              <div>
-                <label className="label">OpenAI API Key</label>
-                <div className="relative">
-                  <input
-                    type={showSecrets.openai ? 'text' : 'password'}
-                    className="input pr-10"
-                    value={settings.ai.openaiApiKey}
-                    onChange={(e) => updateSetting('ai', 'openaiApiKey', e.target.value)}
-                    placeholder="sk-..."
+        <TabsContent value="ai" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                AI Configuration
+              </CardTitle>
+              <CardDescription>
+                Configure AI providers for enhanced insights and summaries
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>AI Provider</Label>
+                <Select
+                  value={settings.ai.provider}
+                  onValueChange={(value) => updateSetting('ai', 'provider', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select AI provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="groq">Groq</SelectItem>
+                    <SelectItem value="gemini">Google Gemini</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Choose your preferred AI provider for generating insights
+                </p>
+              </div>
+
+              {settings.ai.provider === 'openai' && (
+                <SecretInput
+                  label="OpenAI API Key"
+                  description="Get your API key from https://platform.openai.com/api-keys"
+                  value={settings.ai.openaiApiKey}
+                  onChange={(value) => updateSetting('ai', 'openaiApiKey', value)}
+                  placeholder="sk-..."
+                />
+              )}
+
+              {settings.ai.provider === 'groq' && (
+                <SecretInput
+                  label="Groq API Key"
+                  description="Get your API key from https://console.groq.com/keys"
+                  value={settings.ai.groqApiKey}
+                  onChange={(value) => updateSetting('ai', 'groqApiKey', value)}
+                  placeholder="gsk_..."
+                />
+              )}
+
+              {settings.ai.provider === 'gemini' && (
+                <SecretInput
+                  label="Google Gemini API Key"
+                  description="Get your API key from https://aistudio.google.com/app/apikey"
+                  value={settings.ai.geminiApiKey}
+                  onChange={(value) => updateSetting('ai', 'geminiApiKey', value)}
+                  placeholder="AI..."
+                />
+              )}
+
+              <div className="space-y-2">
+                <Label>Model</Label>
+                <Input
+                  value={settings.ai.model}
+                  onChange={(e) => updateSetting('ai', 'model', e.target.value)}
+                  placeholder="gpt-3.5-turbo"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Specific model to use (e.g., gpt-3.5-turbo, llama2-70b-4096, gemini-pro)
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Notifications */}
+        <TabsContent value="notifications" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5" />
+                Notification Settings
+              </CardTitle>
+              <CardDescription>
+                Configure how and where you receive notifications
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label>Enable Notifications</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Turn on/off all notifications
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.notifications.enabled}
+                  onCheckedChange={(checked) => updateSetting('notifications', 'enabled', checked)}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Webhook className="h-4 w-4" />
+                    Microsoft Teams Webhook URL
+                  </Label>
+                  <Input
+                    value={settings.notifications.teamsWebhookUrl}
+                    onChange={(e) => updateSetting('notifications', 'teamsWebhookUrl', e.target.value)}
+                    placeholder="https://outlook.office.com/webhook/..."
                   />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                    onClick={() => toggleSecretVisibility('openai')}
-                  >
-                    {showSecrets.openai ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    )}
-                  </button>
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    Configure incoming webhook in Teams channel
+                    <Button variant="link" size="sm" className="h-auto p-0" asChild>
+                      <a href="https://docs.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook" target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </Button>
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Webhook className="h-4 w-4" />
+                    Slack Webhook URL
+                  </Label>
+                  <Input
+                    value={settings.notifications.slackWebhookUrl}
+                    onChange={(e) => updateSetting('notifications', 'slackWebhookUrl', e.target.value)}
+                    placeholder="https://hooks.slack.com/services/..."
+                  />
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    Create an incoming webhook in your Slack workspace
+                    <Button variant="link" size="sm" className="h-auto p-0" asChild>
+                      <a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </Button>
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Webhook className="h-4 w-4" />
+                    Google Chat Webhook URL
+                  </Label>
+                  <Input
+                    value={settings.notifications.googleChatWebhookUrl}
+                    onChange={(e) => updateSetting('notifications', 'googleChatWebhookUrl', e.target.value)}
+                    placeholder="https://chat.googleapis.com/v1/spaces/..."
+                  />
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    Configure incoming webhook in Google Chat
+                    <Button variant="link" size="sm" className="h-auto p-0" asChild>
+                      <a href="https://developers.google.com/chat/how-tos/webhooks" target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </Button>
+                  </p>
                 </div>
               </div>
-            )}
-            {settings.ai.provider === 'groq' && (
-              <div>
-                <label className="label">Groq API Key</label>
-                <div className="relative">
-                  <input
-                    type={showSecrets.groq ? 'text' : 'password'}
-                    className="input pr-10"
-                    value={settings.ai.groqApiKey}
-                    onChange={(e) => updateSetting('ai', 'groqApiKey', e.target.value)}
-                    placeholder="gsk_..."
-                  />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                    onClick={() => toggleSecretVisibility('groq')}
-                  >
-                    {showSecrets.groq ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    )}
-                  </button>
-                </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Scheduling */}
+        <TabsContent value="scheduling" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Polling Intervals
+              </CardTitle>
+              <CardDescription>
+                Configure how often different data sources are checked
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertTitle>Cron Expression Format</AlertTitle>
+                <AlertDescription>
+                  Use standard cron format: minute hour day month weekday
+                  <br />
+                  <code className="bg-muted px-1 rounded">* * * * *</code> = minute hour day month weekday
+                </AlertDescription>
+              </Alert>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <CronInput
+                  label="Work Items"
+                  value={settings.polling.workItems}
+                  onChange={(value) => updateSetting('polling', 'workItems', value)}
+                  examples={cronExamples.workItems}
+                />
+
+                <CronInput
+                  label="Pipelines"
+                  value={settings.polling.pipelines}
+                  onChange={(value) => updateSetting('polling', 'pipelines', value)}
+                  examples={cronExamples.pipelines}
+                />
+
+                <CronInput
+                  label="Pull Requests"
+                  value={settings.polling.pullRequests}
+                  onChange={(value) => updateSetting('polling', 'pullRequests', value)}
+                  examples={cronExamples.pullRequests}
+                />
+
+                <CronInput
+                  label="Overdue Check"
+                  value={settings.polling.overdueCheck}
+                  onChange={(value) => updateSetting('polling', 'overdueCheck', value)}
+                  examples={cronExamples.overdueCheck}
+                />
               </div>
-            )}
-            {settings.ai.provider === 'gemini' && (
-              <div>
-                <label className="label">Gemini API Key</label>
-                <div className="relative">
-                  <input
-                    type={showSecrets.gemini ? 'text' : 'password'}
-                    className="input pr-10"
-                    value={settings.ai.geminiApiKey}
-                    onChange={(e) => updateSetting('ai', 'geminiApiKey', e.target.value)}
-                    placeholder="AIza..."
-                  />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                    onClick={() => toggleSecretVisibility('gemini')}
-                  >
-                    {showSecrets.gemini ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-            <div>
-              <label className="label">Model</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.ai.model}
-                onChange={(e) => updateSetting('ai', 'model', e.target.value)}
-                placeholder="gpt-3.5-turbo"
-              />
-            </div>
-          </div>
-        </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
-        {/* Notification Configuration */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Notifications</h3>
-          <div className="space-y-4">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="notifications-enabled"
-                className="h-4 w-4 text-azure-600 focus:ring-azure-500 border-gray-300 rounded"
-                checked={settings.notifications.enabled}
-                onChange={(e) => updateSetting('notifications', 'enabled', e.target.checked)}
-              />
-              <label htmlFor="notifications-enabled" className="ml-2 text-sm text-gray-900">
-                Enable notifications
-              </label>
-            </div>
-            <div>
-              <label className="label">Microsoft Teams Webhook URL</label>
-              <input
-                type="url"
-                className="input"
-                value={settings.notifications.teamsWebhookUrl}
-                onChange={(e) => updateSetting('notifications', 'teamsWebhookUrl', e.target.value)}
-                placeholder="https://outlook.office.com/webhook/..."
-              />
-            </div>
-            <div>
-              <label className="label">Slack Webhook URL</label>
-              <input
-                type="url"
-                className="input"
-                value={settings.notifications.slackWebhookUrl}
-                onChange={(e) => updateSetting('notifications', 'slackWebhookUrl', e.target.value)}
-                placeholder="https://hooks.slack.com/services/..."
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Polling Configuration */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Polling Intervals</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="label">Work Items (cron expression)</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.polling.workItemsInterval}
-                onChange={(e) => updateSetting('polling', 'workItemsInterval', e.target.value)}
-                placeholder="*/15 * * * *"
-              />
-              <p className="text-xs text-gray-500 mt-1">Every 15 minutes</p>
-            </div>
-            <div>
-              <label className="label">Pipelines (cron expression)</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.polling.pipelineInterval}
-                onChange={(e) => updateSetting('polling', 'pipelineInterval', e.target.value)}
-                placeholder="*/10 * * * *"
-              />
-              <p className="text-xs text-gray-500 mt-1">Every 10 minutes</p>
-            </div>
-            <div>
-              <label className="label">Pull Requests (cron expression)</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.polling.pullRequestInterval}
-                onChange={(e) => updateSetting('polling', 'pullRequestInterval', e.target.value)}
-                placeholder="0 */2 * * *"
-              />
-              <p className="text-xs text-gray-500 mt-1">Every 2 hours</p>
-            </div>
-            <div>
-              <label className="label">Overdue Check (cron expression)</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.polling.overdueCheckInterval}
-                onChange={(e) => updateSetting('polling', 'overdueCheckInterval', e.target.value)}
-                placeholder="0 9 * * *"
-              />
-              <p className="text-xs text-gray-500 mt-1">Daily at 9 AM</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex justify-end space-x-4">
-        <button
-          onClick={handleTestConnection}
-          disabled={testing}
-          className="btn btn-secondary flex items-center space-x-2"
-        >
-          <TestTube className="h-4 w-4" />
-          <span>{testing ? 'Testing...' : 'Test Connection'}</span>
-        </button>
-        <button
-          onClick={handleSave}
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <Button 
+          onClick={saveSettings} 
           disabled={saving}
-          className="btn btn-primary flex items-center space-x-2"
+          className="gap-2"
         >
-          <Save className="h-4 w-4" />
-          <span>{saving ? 'Saving...' : 'Save Settings'}</span>
-        </button>
+          <Save className={cn("h-4 w-4", saving && "animate-spin")} />
+          {saving ? 'Saving...' : 'Save Settings'}
+        </Button>
       </div>
     </div>
   )
