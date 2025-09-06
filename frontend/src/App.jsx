@@ -7,6 +7,7 @@ import Logs from './pages/Logs'
 import WorkItems from './pages/WorkItems'
 import Pipelines from './pages/Pipelines'
 import PullRequests from './pages/PullRequests'
+import ComponentGallery from './pages/ComponentGallery'
 import { HealthProvider } from './contexts/HealthContext'
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
           <Route path="/pull-requests" element={<PullRequests />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/components" element={<ComponentGallery />} />
         </Routes>
       </AppShell>
     </HealthProvider>

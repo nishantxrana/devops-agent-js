@@ -16,7 +16,8 @@ import {
   Sun,
   Moon,
   Zap,
-  Bell
+  Bell,
+  Palette
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useHealth } from '../contexts/HealthContext'
@@ -29,6 +30,7 @@ const navigation = [
   { name: 'Pull Requests', href: '/pull-requests', icon: GitPullRequest },
   { name: 'Logs', href: '/logs', icon: FileText },
   { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Components', href: '/components', icon: Palette },
 ]
 
 // Dark mode hook
