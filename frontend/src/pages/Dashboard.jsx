@@ -8,13 +8,118 @@ import {
   Clock,
   Users,
   Activity,
-  RefreshCw
+  RefreshCw,
+  Zap,
+  BarChart3,
+  ExternalLink
 } from 'lucide-react'
 import { apiService } from '../api/apiService'
 import { useHealth } from '../contexts/HealthContext'
-import LoadingSpinner from '../components/LoadingSpinner'
-import ErrorMessage from '../components/ErrorMessage'
-import SkeletonCard from '../components/SkeletonCard'
+import { useToast } from '@/hooks/use-toast'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Progress } from '@/components/ui/progress'
+import { Separator } from '@/components/ui/separator'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { cn } from '@/lib/utils'
+
+function StatCard({ title, value, subtitle, icon: Icon, isLoading, progress, trend }) {
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-4 rounded" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-8 w-16 mb-2" />
+          <Skeleton className="h-4 w-32" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="hover:shadow-md transition-shadow duration-200">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">
+          {title}
+        </CardTitle>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+        <p className="text-xs text-muted-foreground mt-1">
+          {subtitle}
+        </p>
+        {progress !== undefined && (
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+              <span>{title === 'Work Items' ? 'Completion' : 'Success Rate'}</span>
+              <span>{Math.round(progress)}%</span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+        )}
+        {trend && (
+          <div className={cn(
+            "flex items-center gap-1 text-xs mt-2",
+            trend > 0 ? "text-green-600" : trend < 0 ? "text-red-600" : "text-muted-foreground"
+          )}>
+            <TrendingUp className={cn("h-3 w-3", trend < 0 && "rotate-180")} />
+            <span>{Math.abs(trend)}% from last week</span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function AlertCard({ type, count, message, description }) {
+  const icons = {
+    overdue: Clock,
+    failed: GitBranch,
+    idle: GitPullRequest,
+    healthy: TrendingUp
+  }
+  
+  const variants = {
+    overdue: "destructive",
+    failed: "destructive", 
+    idle: "default",
+    healthy: "default"
+  }
+
+  const Icon = icons[type]
+
+  return (
+    <Alert variant={variants[type]} className="border-l-4">
+      <Icon className="h-4 w-4" />
+      <AlertTitle className="text-sm font-medium">
+        {count !== undefined ? `${count} ${message}` : message}
+      </AlertTitle>
+      <AlertDescription className="text-xs">
+        {description}
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function ActivityItem({ activity, index }) {
+  return (
+    <div className="flex items-start space-x-3 p-3 rounded-lg hover:bg-muted/50 transition-colors">
+      <div className="flex-shrink-0 mt-1">
+        <div className="w-2 h-2 bg-primary rounded-full" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium leading-snug">{activity.message}</p>
+        <p className="text-xs text-muted-foreground">{activity.timestamp}</p>
+      </div>
+    </div>
+  )
+}
 
 export default function Dashboard() {
   const [initialLoading, setInitialLoading] = useState(true)
@@ -31,7 +136,8 @@ export default function Dashboard() {
     pullRequests: { total: 0, active: 0, idle: 0 }
   })
   const [recentActivity, setRecentActivity] = useState([])
-  const { isConnected, isChecking, healthData, lastCheck } = useHealth()
+  const { isConnected, isChecking, healthData } = useHealth()
+  const { toast } = useToast()
 
   useEffect(() => {
     loadDashboardData()
@@ -48,7 +154,7 @@ export default function Dashboard() {
         logs: true
       })
 
-      // Phase 1: Load critical work items data first (fastest)
+      // Phase 1: Load critical work items data first
       try {
         const workItems = await apiService.getCurrentSprintSummary()
         setStats(prev => ({
@@ -61,7 +167,7 @@ export default function Dashboard() {
           }
         }))
         setLoadingStates(prev => ({ ...prev, workItems: false }))
-        setInitialLoading(false) // Show UI immediately after first data loads
+        setInitialLoading(false)
       } catch (err) {
         console.error('Failed to load work items:', err)
         setLoadingStates(prev => ({ ...prev, workItems: false }))
@@ -108,6 +214,14 @@ export default function Dashboard() {
       }
       setLoadingStates(prev => ({ ...prev, logs: false }))
 
+      // Show success toast
+      if (!initialLoading) {
+        toast({
+          title: "Dashboard refreshed",
+          description: "All data has been updated successfully.",
+        })
+      }
+
     } catch (err) {
       setError('Failed to load dashboard data')
       console.error('Dashboard error:', err)
@@ -118,256 +232,195 @@ export default function Dashboard() {
         pullRequests: false,
         logs: false
       })
+      
+      toast({
+        title: "Error loading dashboard",
+        description: "Failed to load dashboard data. Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
-  // Only show full loading spinner on initial load with error
-  if (initialLoading && error) {
-    return <LoadingSpinner />
-  }
+  const isRefreshing = Object.values(loadingStates).some(loading => loading)
 
-  if (error && initialLoading) {
-    return <ErrorMessage message={error} onRetry={loadDashboardData} />
-  }
+  // Calculate progress percentages
+  const workItemsProgress = stats.workItems.total > 0 
+    ? (stats.workItems.completed / stats.workItems.total) * 100 
+    : 0
+    
+  const buildsSuccessRate = stats.builds.total > 0 
+    ? (stats.builds.succeeded / stats.builds.total) * 100 
+    : 0
 
-  const statCards = [
-    {
-      title: 'Work Items',
-      value: stats.workItems.total,
-      subtitle: `${stats.workItems.active} active, ${stats.workItems.overdue} overdue`,
-      icon: CheckSquare,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50'
-    },
-    {
-      title: 'Recent Builds',
-      value: stats.builds.total,
-      subtitle: `${stats.builds.succeeded} succeeded, ${stats.builds.failed} failed`,
-      icon: GitBranch,
-      color: stats.builds.failed > 0 ? 'text-red-600' : 'text-green-600',
-      bgColor: stats.builds.failed > 0 ? 'bg-red-50' : 'bg-green-50'
-    },
-    {
-      title: 'Pull Requests',
-      value: stats.pullRequests.total,
-      subtitle: `${stats.pullRequests.active} active, ${stats.pullRequests.idle} idle`,
-      icon: GitPullRequest,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50'
-    },
-    {
-      title: 'System Status',
-      value: isChecking ? 'Checking...' : isConnected ? 'Healthy' : 'Unhealthy',
-      subtitle: isChecking ? 'Checking connection...' : 
-                isConnected ? `Uptime: ${healthData?.uptime ? Math.floor(healthData.uptime / 3600) + 'h' : 'N/A'}` : 
-                'Backend disconnected',
-      icon: Activity,
-      color: isChecking ? 'text-yellow-600' : isConnected ? 'text-green-600' : 'text-red-600',
-      bgColor: isChecking ? 'bg-yellow-50' : isConnected ? 'bg-green-50' : 'bg-red-50'
-    }
-  ]
+  const systemHealthStatus = isChecking ? 'Checking...' : isConnected ? 'Healthy' : 'Unhealthy'
+  const systemHealthDescription = isChecking 
+    ? 'Checking connection...' 
+    : isConnected 
+      ? `Uptime: ${healthData?.uptime ? Math.floor(healthData.uptime / 3600) + 'h' : 'N/A'}`
+      : 'Backend disconnected'
 
   return (
-    <div className="space-y-6">
-      {/* Header with Refresh Button */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
-          <p className="text-gray-600">Overview of your Azure DevOps monitoring</p>
+    <div className="space-y-8">
+      {/* Page Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Overview of your Azure DevOps monitoring
+          </p>
         </div>
-        <button
+        <Button 
           onClick={loadDashboardData}
-          disabled={initialLoading || Object.values(loadingStates).some(loading => loading)}
-          className="group inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-gradient-to-r from-gray-50 to-gray-100 border-0 rounded-xl hover:from-blue-50 hover:to-indigo-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-60 disabled:cursor-not-allowed transition-colors duration-300"
+          disabled={isRefreshing}
+          variant="outline"
+          size="sm"
+          className="gap-2"
         >
-          <RefreshCw className={`h-4 w-4 transition-all duration-300 ${(initialLoading || Object.values(loadingStates).some(loading => loading)) ? 'animate-spin text-blue-500' : 'group-hover:text-blue-500 group-hover:rotate-180'}`} />
-          <span className="font-medium">{(initialLoading || Object.values(loadingStates).some(loading => loading)) ? 'Refreshing...' : 'Refresh'}</span>
-        </button>
+          <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+        </Button>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {statCards.map((stat, index) => {
-          const Icon = stat.icon
-          const isSystemStatus = stat.title === 'System Status'
-          const tooltipText = isSystemStatus && lastCheck 
-            ? `Last checked: ${lastCheck.toLocaleTimeString()}`
-            : undefined
-          
-          // Show skeleton for loading states
-          const isLoading = (
-            (stat.title === 'Work Items' && loadingStates.workItems) ||
-            (stat.title === 'Recent Builds' && loadingStates.builds) ||
-            (stat.title === 'Pull Requests' && loadingStates.pullRequests) ||
-            (stat.title === 'System Status' && false) // System status loads immediately
-          )
-          
-          if (isLoading) {
-            return <SkeletonCard key={index} />
-          }
-            
-          return (
-            <div 
-              key={index} 
-              className="card hover:shadow-lg transition-shadow duration-200"
-              title={tooltipText}
-            >
-              <div className="flex items-center">
-                <div className={`p-2 rounded-lg ${stat.bgColor} transition-all duration-200 hover:scale-105`}>
-                  <Icon className={`h-6 w-6 ${stat.color}`} />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-semibold text-gray-900">{stat.value}</p>
-                </div>
-              </div>
-              <p className="mt-2 text-sm text-gray-500">{stat.subtitle}</p>
-              
-              {/* Add progress indicator for Work Items */}
-              {stat.title === 'Work Items' && stats.workItems.total > 0 && (
-                <div className="mt-3">
-                  <div className="flex justify-between text-xs text-gray-600 mb-1">
-                    <span>Completion</span>
-                    <span>{Math.round((stats.workItems.completed / stats.workItems.total) * 100)}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-500" 
-                      style={{ width: `${Math.round((stats.workItems.completed / stats.workItems.total) * 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
-              
-              {/* Add success rate for Builds */}
-              {stat.title === 'Recent Builds' && stats.builds.total > 0 && (
-                <div className="mt-3">
-                  <div className="flex justify-between text-xs text-gray-600 mb-1">
-                    <span>Success Rate</span>
-                    <span>{Math.round((stats.builds.succeeded / stats.builds.total) * 100)}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-green-600 h-2 rounded-full transition-all duration-500" 
-                      style={{ width: `${Math.round((stats.builds.succeeded / stats.builds.total) * 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        })}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Work Items"
+          value={stats.workItems.total}
+          subtitle={`${stats.workItems.active} active, ${stats.workItems.overdue} overdue`}
+          icon={CheckSquare}
+          isLoading={loadingStates.workItems}
+          progress={workItemsProgress}
+        />
+        <StatCard
+          title="Recent Builds"
+          value={stats.builds.total}
+          subtitle={`${stats.builds.succeeded} succeeded, ${stats.builds.failed} failed`}
+          icon={GitBranch}
+          isLoading={loadingStates.builds}
+          progress={buildsSuccessRate}
+        />
+        <StatCard
+          title="Pull Requests"
+          value={stats.pullRequests.total}
+          subtitle={`${stats.pullRequests.active} active, ${stats.pullRequests.idle} idle`}
+          icon={GitPullRequest}
+          isLoading={loadingStates.pullRequests}
+        />
+        <StatCard
+          title="System Status"
+          value={systemHealthStatus}
+          subtitle={systemHealthDescription}
+          icon={Activity}
+          isLoading={false}
+        />
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Alerts */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Active Alerts</h3>
-            <AlertTriangle className="h-5 w-5 text-yellow-500" />
-          </div>
-          <div className="space-y-3">
-            {(loadingStates.workItems || loadingStates.builds || loadingStates.pullRequests) ? (
-              // Show skeleton loading for alerts
-              Array.from({ length: 2 }).map((_, index) => (
-                <div key={index} className="flex items-center p-3 bg-gray-50 rounded-lg animate-pulse">
-                  <div className="h-5 w-5 bg-gray-300 rounded mr-3"></div>
-                  <div className="flex-1">
-                    <div className="h-4 bg-gray-300 rounded w-3/4 mb-1"></div>
-                    <div className="h-3 bg-gray-300 rounded w-1/2"></div>
+      {/* Content Grid */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Active Alerts */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">Active Alerts</CardTitle>
+                <CardDescription>
+                  System notifications and warnings
+                </CardDescription>
+              </div>
+              <AlertTriangle className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isRefreshing ? (
+              <div className="space-y-3">
+                {Array.from({ length: 2 }).map((_, index) => (
+                  <div key={index} className="p-3 border rounded-lg">
+                    <Skeleton className="h-4 w-3/4 mb-2" />
+                    <Skeleton className="h-3 w-1/2" />
                   </div>
-                </div>
-              ))
+                ))}
+              </div>
             ) : (
               <>
                 {stats.workItems.overdue > 0 && (
-                  <div className="flex items-center p-3 bg-red-50 rounded-lg">
-                    <Clock className="h-5 w-5 text-red-500 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-red-800">
-                        {stats.workItems.overdue} overdue work items
-                      </p>
-                      <p className="text-xs text-red-600">Require immediate attention</p>
-                    </div>
-                  </div>
+                  <AlertCard
+                    type="overdue"
+                    count={stats.workItems.overdue}
+                    message="overdue work items"
+                    description="Require immediate attention"
+                  />
                 )}
                 {stats.builds.failed > 0 && (
-                  <div className="flex items-center p-3 bg-red-50 rounded-lg">
-                    <GitBranch className="h-5 w-5 text-red-500 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-red-800">
-                        {stats.builds.failed} failed builds
-                      </p>
-                      <p className="text-xs text-red-600">Check build logs for details</p>
-                    </div>
-                  </div>
+                  <AlertCard
+                    type="failed"
+                    count={stats.builds.failed}
+                    message="failed builds"
+                    description="Check build logs for details"
+                  />
                 )}
                 {stats.pullRequests.idle > 0 && (
-                  <div className="flex items-center p-3 bg-yellow-50 rounded-lg">
-                    <GitPullRequest className="h-5 w-5 text-yellow-500 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-yellow-800">
-                        {stats.pullRequests.idle} idle pull requests
-                      </p>
-                      <p className="text-xs text-yellow-600">No activity for 48+ hours</p>
-                    </div>
-                  </div>
+                  <AlertCard
+                    type="idle"
+                    count={stats.pullRequests.idle}
+                    message="idle pull requests"
+                    description="No activity for 48+ hours"
+                  />
                 )}
                 {stats.workItems.overdue === 0 && stats.builds.failed === 0 && stats.pullRequests.idle === 0 && (
-                  <div className="flex items-center p-3 bg-green-50 rounded-lg">
-                    <TrendingUp className="h-5 w-5 text-green-500 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-green-800">All systems healthy</p>
-                      <p className="text-xs text-green-600">No active alerts</p>
-                    </div>
-                  </div>
+                  <AlertCard
+                    type="healthy"
+                    message="All systems healthy"
+                    description="No active alerts"
+                  />
                 )}
               </>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Recent Activity */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Recent Activity</h3>
-            <Activity className="h-5 w-5 text-gray-400" />
-          </div>
-          <div className="space-y-3">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">Recent Activity</CardTitle>
+                <CardDescription>
+                  Latest system events and updates
+                </CardDescription>
+              </div>
+              <Activity className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent>
             {loadingStates.logs ? (
-              // Show skeleton loading for recent activity
-              Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="flex items-start space-x-3 animate-pulse">
-                  <div className="flex-shrink-0">
-                    <div className="w-2 h-2 bg-gray-300 rounded-full mt-2"></div>
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="flex items-start space-x-3 p-3">
+                    <Skeleton className="w-2 h-2 rounded-full mt-2" />
+                    <div className="flex-1">
+                      <Skeleton className="h-4 w-3/4 mb-1" />
+                      <Skeleton className="h-3 w-1/2" />
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="h-4 bg-gray-300 rounded w-3/4 mb-1"></div>
-                    <div className="h-3 bg-gray-300 rounded w-1/2"></div>
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             ) : recentActivity.length > 0 ? (
-              recentActivity.slice(0, 5).map((activity, index) => (
-                <div key={index} className="flex items-start space-x-3">
-                  <div className="flex-shrink-0">
-                    <div className="w-2 h-2 bg-azure-500 rounded-full mt-2"></div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 truncate">{activity.message}</p>
-                    <p className="text-xs text-gray-500">{activity.timestamp}</p>
-                  </div>
-                </div>
-              ))
+              <div className="space-y-1">
+                {recentActivity.slice(0, 5).map((activity, index) => (
+                  <ActivityItem key={index} activity={activity} index={index} />
+                ))}
+              </div>
             ) : (
-              <div className="text-center py-4">
-                <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No recent activity</p>
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Users className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                <p className="text-sm text-muted-foreground font-medium">No recent activity</p>
+                <p className="text-xs text-muted-foreground">
+                  Activity will appear here when events occur
+                </p>
               </div>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
