@@ -7,29 +7,354 @@ import {
   CheckCircle, 
   XCircle, 
   AlertTriangle,
-  Info,
   Settings as SettingsIcon,
   Bell,
   Zap,
   Clock,
   Shield,
   Database,
-  Webhook,
   Bot
 } from 'lucide-react'
 import { apiService } from '../api/apiService'
-import LoadingSpinner from '../components/LoadingSpinner'
 import { useHealth } from '../contexts/HealthContext'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import { Button } from '../components/ui/button'
+import { Input, Label, FormField } from '../components/ui/form'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
+import { Checkbox } from '../components/ui/checkbox'
+import { PageHeader } from '../components/ui/page-header'
+import { Skeleton } from '../components/ui/skeleton'
+import { EmptyState, ErrorState } from '../components/ui/empty-state'
+
+// Configuration sections data
+const configSections = [
+  {
+    id: 'azure',
+    title: 'Azure DevOps',
+    description: 'Connect to your Azure DevOps organization',
+    icon: Database,
+    color: 'primary'
+  },
+  {
+    id: 'ai',
+    title: 'AI Provider',
+    description: 'Configure AI services for insights',
+    icon: Bot,
+    color: 'info'
+  },
+  {
+    id: 'notifications',
+    title: 'Notifications',
+    description: 'Set up alerts and webhooks',
+    icon: Bell,
+    color: 'warning'
+  },
+  {
+    id: 'polling',
+    title: 'Polling Intervals',
+    description: 'Configure data refresh schedules',
+    icon: Clock,
+    color: 'success'
+  }
+]
+
+// Section Navigation Component
+const SectionNav = ({ activeSection, onSectionChange }) => {
+  return (
+    <nav className="space-y-2">
+      {configSections.map((section) => {
+        const isActive = activeSection === section.id
+        const colorClasses = {
+          primary: 'text-primary-600 bg-primary-50 dark:text-primary-400 dark:bg-primary-600/10',
+          info: 'text-info-600 bg-info-50 dark:text-info-400 dark:bg-info-600/10',
+          warning: 'text-warning-600 bg-warning-50 dark:text-warning-400 dark:bg-warning-600/10',
+          success: 'text-success-600 bg-success-50 dark:text-success-400 dark:bg-success-600/10'
+        }
+
+        return (
+          <button
+            key={section.id}
+            onClick={() => onSectionChange(section.id)}
+            className={`w-full flex items-center gap-x-3 rounded-lg px-3 py-2 text-left text-body-sm font-medium transition-all ${
+              isActive
+                ? `${colorClasses[section.color]} shadow-sm`
+                : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-200 dark:hover:text-neutral-300'
+            }`}
+          >
+            <section.icon className={`h-5 w-5 shrink-0 ${isActive ? '' : 'text-neutral-400'}`} />
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">{section.title}</div>
+              <div className={`text-caption ${isActive ? 'opacity-80' : 'text-neutral-500'}`}>
+                {section.description}
+              </div>
+            </div>
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
+
+// Password Input Component
+const PasswordInput = ({ value, onChange, placeholder, ...props }) => {
+  const [show, setShow] = useState(false)
+  
+  return (
+    <div className="relative">
+      <Input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="pr-10"
+        {...props}
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="absolute right-1 top-1 h-8 w-8 p-0"
+        onClick={() => setShow(!show)}
+      >
+        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </Button>
+    </div>
+  )
+}
+
+// Azure DevOps Configuration
+const AzureDevOpsSection = ({ settings, onSettingsChange, onTest, testing, testResult }) => (
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        <Database className="h-5 w-5 text-primary-600" />
+        Azure DevOps Configuration
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <FormField label="Organization" required>
+          <Input
+            placeholder="your-organization"
+            value={settings.azureDevOps.organization}
+            onChange={(e) => onSettingsChange('azureDevOps', 'organization', e.target.value)}
+          />
+        </FormField>
+        
+        <FormField label="Project" required>
+          <Input
+            placeholder="your-project"
+            value={settings.azureDevOps.project}
+            onChange={(e) => onSettingsChange('azureDevOps', 'project', e.target.value)}
+          />
+        </FormField>
+      </div>
+
+      <FormField label="Personal Access Token" required>
+        <PasswordInput
+          placeholder="your-personal-access-token"
+          value={settings.azureDevOps.personalAccessToken}
+          onChange={(e) => onSettingsChange('azureDevOps', 'personalAccessToken', e.target.value)}
+        />
+      </FormField>
+
+      <FormField label="Base URL">
+        <Input
+          placeholder="https://dev.azure.com"
+          value={settings.azureDevOps.baseUrl}
+          onChange={(e) => onSettingsChange('azureDevOps', 'baseUrl', e.target.value)}
+        />
+      </FormField>
+
+      {/* Test Connection */}
+      <div className="flex items-center justify-between pt-4 border-t border-neutral-200 dark:border-neutral-300">
+        <div className="flex-1">
+          {testResult && (
+            <div className={`flex items-center gap-2 text-body-sm ${
+              testResult.success ? 'text-success-600' : 'text-error-600'
+            }`}>
+              {testResult.success ? (
+                <CheckCircle className="h-4 w-4" />
+              ) : (
+                <XCircle className="h-4 w-4" />
+              )}
+              {testResult.message}
+            </div>
+          )}
+        </div>
+        <Button
+          onClick={onTest}
+          disabled={testing}
+          variant="outline"
+          className="flex items-center gap-2"
+        >
+          <TestTube className={`h-4 w-4 ${testing ? 'animate-pulse' : ''}`} />
+          {testing ? 'Testing...' : 'Test Connection'}
+        </Button>
+      </div>
+    </CardContent>
+  </Card>
+)
+
+// AI Configuration Section
+const AISection = ({ settings, onSettingsChange }) => (
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        <Bot className="h-5 w-5 text-info-600" />
+        AI Configuration
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="space-y-6">
+      <FormField label="AI Provider" required>
+        <Select
+          value={settings.ai.provider}
+          onValueChange={(value) => onSettingsChange('ai', 'provider', value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select AI provider" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="openai">OpenAI</SelectItem>
+            <SelectItem value="groq">Groq</SelectItem>
+            <SelectItem value="gemini">Google Gemini</SelectItem>
+          </SelectContent>
+        </Select>
+      </FormField>
+
+      {settings.ai.provider === 'openai' && (
+        <FormField label="OpenAI API Key" required>
+          <PasswordInput
+            placeholder="sk-..."
+            value={settings.ai.openaiApiKey}
+            onChange={(e) => onSettingsChange('ai', 'openaiApiKey', e.target.value)}
+          />
+        </FormField>
+      )}
+
+      {settings.ai.provider === 'groq' && (
+        <FormField label="Groq API Key" required>
+          <PasswordInput
+            placeholder="gsk_..."
+            value={settings.ai.groqApiKey}
+            onChange={(e) => onSettingsChange('ai', 'groqApiKey', e.target.value)}
+          />
+        </FormField>
+      )}
+
+      {settings.ai.provider === 'gemini' && (
+        <FormField label="Gemini API Key" required>
+          <PasswordInput
+            placeholder="AIza..."
+            value={settings.ai.geminiApiKey}
+            onChange={(e) => onSettingsChange('ai', 'geminiApiKey', e.target.value)}
+          />
+        </FormField>
+      )}
+
+      <FormField label="Model" required>
+        <Input
+          placeholder="gpt-3.5-turbo"
+          value={settings.ai.model}
+          onChange={(e) => onSettingsChange('ai', 'model', e.target.value)}
+        />
+      </FormField>
+    </CardContent>
+  </Card>
+)
+
+// Notifications Section
+const NotificationsSection = ({ settings, onSettingsChange }) => (
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        <Bell className="h-5 w-5 text-warning-600" />
+        Notifications
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="space-y-6">
+      <div className="flex items-center space-x-2">
+        <Checkbox
+          id="enableNotifications"
+          checked={settings.notifications.enabled}
+          onCheckedChange={(checked) => onSettingsChange('notifications', 'enabled', checked)}
+        />
+        <Label htmlFor="enableNotifications" className="text-body-sm font-medium">
+          Enable notifications
+        </Label>
+      </div>
+
+      {settings.notifications.enabled && (
+        <>
+          <FormField label="Microsoft Teams Webhook URL">
+            <PasswordInput
+              placeholder="https://outlook.office.com/webhook/..."
+              value={settings.notifications.teamsWebhookUrl}
+              onChange={(e) => onSettingsChange('notifications', 'teamsWebhookUrl', e.target.value)}
+            />
+          </FormField>
+
+          <FormField label="Slack Webhook URL">
+            <PasswordInput
+              placeholder="https://hooks.slack.com/services/..."
+              value={settings.notifications.slackWebhookUrl}
+              onChange={(e) => onSettingsChange('notifications', 'slackWebhookUrl', e.target.value)}
+            />
+          </FormField>
+
+          <FormField label="Google Chat Webhook URL">
+            <PasswordInput
+              placeholder="https://chat.googleapis.com/v1/spaces/..."
+              value={settings.notifications.googleChatWebhookUrl}
+              onChange={(e) => onSettingsChange('notifications', 'googleChatWebhookUrl', e.target.value)}
+            />
+          </FormField>
+        </>
+      )}
+    </CardContent>
+  </Card>
+)
+
+// Polling Section
+const PollingSection = ({ settings, onSettingsChange }) => {
+  const intervals = [
+    { key: 'workItemsInterval', label: 'Work Items', description: 'How often to check for work item updates' },
+    { key: 'pipelineInterval', label: 'Pipelines', description: 'How often to check pipeline status' },
+    { key: 'pullRequestInterval', label: 'Pull Requests', description: 'How often to check pull request status' },
+    { key: 'overdueCheckInterval', label: 'Overdue Check', description: 'How often to check for overdue items' }
+  ]
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Clock className="h-5 w-5 text-success-600" />
+          Polling Intervals
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {intervals.map((interval) => (
+          <FormField key={interval.key} label={interval.label} help={interval.description}>
+            <Input
+              placeholder="*/15 * * * *"
+              value={settings.polling[interval.key]}
+              onChange={(e) => onSettingsChange('polling', interval.key, e.target.value)}
+            />
+          </FormField>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
 
 export default function Settings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
-  const [showSecrets, setShowSecrets] = useState({})
   const [testResult, setTestResult] = useState(null)
-  const [activeTab, setActiveTab] = useState('azure')
-  const [validationErrors, setValidationErrors] = useState({})
-  const { isConnected, healthData } = useHealth()
+  const [activeSection, setActiveSection] = useState('azure')
+  const [error, setError] = useState(null)
+  const { isConnected } = useHealth()
   
   const [settings, setSettings] = useState({
     azureDevOps: {
@@ -56,51 +381,8 @@ export default function Settings() {
       pipelineInterval: '*/10 * * * *',
       pullRequestInterval: '0 */2 * * *',
       overdueCheckInterval: '0 9 * * *'
-    },
-    security: {
-      webhookSecret: '',
-      apiToken: '',
-      enableRateLimit: true,
-      maxRequestsPerMinute: 100
     }
   })
-
-  const validateSettings = () => {
-    const errors = {}
-    
-    // Azure DevOps validation
-    if (!settings.azureDevOps.organization.trim()) {
-      errors.organization = 'Organization is required'
-    }
-    if (!settings.azureDevOps.project.trim()) {
-      errors.project = 'Project is required'
-    }
-    if (!settings.azureDevOps.personalAccessToken.trim()) {
-      errors.personalAccessToken = 'Personal Access Token is required'
-    }
-    
-    // AI validation
-    if (settings.ai.provider === 'openai' && !settings.ai.openaiApiKey.trim()) {
-      errors.openaiApiKey = 'OpenAI API Key is required when using OpenAI'
-    }
-    if (settings.ai.provider === 'groq' && !settings.ai.groqApiKey.trim()) {
-      errors.groqApiKey = 'Groq API Key is required when using Groq'
-    }
-    if (settings.ai.provider === 'gemini' && !settings.ai.geminiApiKey.trim()) {
-      errors.geminiApiKey = 'Gemini API Key is required when using Gemini'
-    }
-    
-    setValidationErrors(errors)
-    return Object.keys(errors).length === 0
-  }
-
-  const tabs = [
-    { id: 'azure', name: 'Azure DevOps', icon: Database },
-    { id: 'ai', name: 'AI Configuration', icon: Bot },
-    { id: 'notifications', name: 'Notifications', icon: Bell },
-    { id: 'polling', name: 'Polling', icon: Clock },
-    { id: 'security', name: 'Security', icon: Shield }
-  ]
 
   useEffect(() => {
     loadSettings()
@@ -109,361 +391,138 @@ export default function Settings() {
   const loadSettings = async () => {
     try {
       setLoading(true)
-      const data = await apiService.getSettings()
-      setSettings(data)
-    } catch (error) {
-      console.error('Failed to load settings:', error)
+      setError(null)
+      const response = await apiService.getSettings()
+      if (response) {
+        setSettings(prev => ({ ...prev, ...response }))
+      }
+    } catch (err) {
+      console.error('Error loading settings:', err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
   }
 
+  const updateSetting = (section, key, value) => {
+    setSettings(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [key]: value
+      }
+    }))
+    setTestResult(null) // Clear test results when settings change
+  }
+
   const handleSave = async () => {
-    if (!validateSettings()) {
-      setTestResult({ success: false, message: 'Please fix validation errors before saving.' })
-      return
-    }
-    
     try {
       setSaving(true)
-      await apiService.updateSettings(settings)
-      setTestResult({ success: true, message: 'Settings saved successfully!' })
-    } catch (error) {
-      setTestResult({ success: false, message: 'Failed to save settings: ' + error.message })
+      await apiService.saveSettings(settings)
+      // Could add success toast here
+    } catch (err) {
+      console.error('Error saving settings:', err)
+      setError(err.message)
     } finally {
       setSaving(false)
     }
   }
 
-  const handleTestConnection = async () => {
+  const handleTest = async () => {
     try {
       setTesting(true)
-      const result = await apiService.testConnection()
-      setTestResult({ success: true, message: 'Connection test successful!' })
-    } catch (error) {
-      setTestResult({ success: false, message: 'Connection test failed: ' + error.message })
+      setTestResult(null)
+      const result = await apiService.testConnection(settings.azureDevOps)
+      setTestResult({
+        success: result.success || false,
+        message: result.message || (result.success ? 'Connection successful!' : 'Connection failed')
+      })
+    } catch (err) {
+      setTestResult({
+        success: false,
+        message: err.message || 'Connection test failed'
+      })
     } finally {
       setTesting(false)
     }
   }
 
-  const toggleSecretVisibility = (field) => {
-    setShowSecrets(prev => ({
-      ...prev,
-      [field]: !prev[field]
-    }))
-  }
-
-  const updateSetting = (section, field, value) => {
-    setSettings(prev => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: value
-      }
-    }))
+  if (error && loading) {
+    return <ErrorState message={error} onRetry={loadSettings} />
   }
 
   if (loading) {
-    return <LoadingSpinner />
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Settings" description="Configure your Azure DevOps monitoring agent" />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+          <div className="lg:col-span-3">
+            <Skeleton className="h-96 w-full" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderSection = () => {
+    switch (activeSection) {
+      case 'azure':
+        return (
+          <AzureDevOpsSection
+            settings={settings}
+            onSettingsChange={updateSetting}
+            onTest={handleTest}
+            testing={testing}
+            testResult={testResult}
+          />
+        )
+      case 'ai':
+        return <AISection settings={settings} onSettingsChange={updateSetting} />
+      case 'notifications':
+        return <NotificationsSection settings={settings} onSettingsChange={updateSetting} />
+      case 'polling':
+        return <PollingSection settings={settings} onSettingsChange={updateSetting} />
+      default:
+        return null
+    }
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
-        <p className="text-gray-600">Configure your Azure DevOps monitoring agent</p>
-      </div>
+      <PageHeader
+        title="Settings"
+        description="Configure your Azure DevOps monitoring agent"
+        actions={[
+          <Button
+            key="save"
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2"
+          >
+            <Save className={`h-4 w-4 ${saving ? 'animate-pulse' : ''}`} />
+            {saving ? 'Saving...' : 'Save Settings'}
+          </Button>
+        ]}
+      />
 
-      {/* Test Result */}
-      {testResult && (
-        <div className={`p-4 rounded-lg flex items-center space-x-2 ${
-          testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-        }`}>
-          {testResult.success ? (
-            <CheckCircle className="h-5 w-5" />
-          ) : (
-            <XCircle className="h-5 w-5" />
-          )}
-          <span>{testResult.message}</span>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Azure DevOps Configuration */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Azure DevOps Configuration</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="label">Organization</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.azureDevOps.organization}
-                onChange={(e) => updateSetting('azureDevOps', 'organization', e.target.value)}
-                placeholder="your-organization"
-              />
-            </div>
-            <div>
-              <label className="label">Project</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.azureDevOps.project}
-                onChange={(e) => updateSetting('azureDevOps', 'project', e.target.value)}
-                placeholder="your-project"
-              />
-            </div>
-            <div>
-              <label className="label">Personal Access Token</label>
-              <div className="relative">
-                <input
-                  type={showSecrets.pat ? 'text' : 'password'}
-                  className="input pr-10"
-                  value={settings.azureDevOps.personalAccessToken}
-                  onChange={(e) => updateSetting('azureDevOps', 'personalAccessToken', e.target.value)}
-                  placeholder="your-personal-access-token"
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => toggleSecretVisibility('pat')}
-                >
-                  {showSecrets.pat ? (
-                    <EyeOff className="h-4 w-4 text-gray-400" />
-                  ) : (
-                    <Eye className="h-4 w-4 text-gray-400" />
-                  )}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="label">Base URL</label>
-              <input
-                type="url"
-                className="input"
-                value={settings.azureDevOps.baseUrl}
-                onChange={(e) => updateSetting('azureDevOps', 'baseUrl', e.target.value)}
-                placeholder="https://dev.azure.com"
-              />
-            </div>
-          </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+        {/* Section Navigation */}
+        <div className="lg:col-span-1">
+          <SectionNav 
+            activeSection={activeSection} 
+            onSectionChange={setActiveSection} 
+          />
         </div>
 
-        {/* AI Configuration */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">AI Configuration</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="label">AI Provider</label>
-              <select
-                className="input"
-                value={settings.ai.provider}
-                onChange={(e) => updateSetting('ai', 'provider', e.target.value)}
-              >
-                <option value="openai">OpenAI</option>
-                <option value="groq">Groq</option>
-                <option value="gemini">Google Gemini</option>
-              </select>
-            </div>
-            {settings.ai.provider === 'openai' && (
-              <div>
-                <label className="label">OpenAI API Key</label>
-                <div className="relative">
-                  <input
-                    type={showSecrets.openai ? 'text' : 'password'}
-                    className="input pr-10"
-                    value={settings.ai.openaiApiKey}
-                    onChange={(e) => updateSetting('ai', 'openaiApiKey', e.target.value)}
-                    placeholder="sk-..."
-                  />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                    onClick={() => toggleSecretVisibility('openai')}
-                  >
-                    {showSecrets.openai ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-            {settings.ai.provider === 'groq' && (
-              <div>
-                <label className="label">Groq API Key</label>
-                <div className="relative">
-                  <input
-                    type={showSecrets.groq ? 'text' : 'password'}
-                    className="input pr-10"
-                    value={settings.ai.groqApiKey}
-                    onChange={(e) => updateSetting('ai', 'groqApiKey', e.target.value)}
-                    placeholder="gsk_..."
-                  />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                    onClick={() => toggleSecretVisibility('groq')}
-                  >
-                    {showSecrets.groq ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-            {settings.ai.provider === 'gemini' && (
-              <div>
-                <label className="label">Gemini API Key</label>
-                <div className="relative">
-                  <input
-                    type={showSecrets.gemini ? 'text' : 'password'}
-                    className="input pr-10"
-                    value={settings.ai.geminiApiKey}
-                    onChange={(e) => updateSetting('ai', 'geminiApiKey', e.target.value)}
-                    placeholder="AIza..."
-                  />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                    onClick={() => toggleSecretVisibility('gemini')}
-                  >
-                    {showSecrets.gemini ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-            <div>
-              <label className="label">Model</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.ai.model}
-                onChange={(e) => updateSetting('ai', 'model', e.target.value)}
-                placeholder="gpt-3.5-turbo"
-              />
-            </div>
-          </div>
+        {/* Section Content */}
+        <div className="lg:col-span-3">
+          {renderSection()}
         </div>
-
-        {/* Notification Configuration */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Notifications</h3>
-          <div className="space-y-4">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="notifications-enabled"
-                className="h-4 w-4 text-azure-600 focus:ring-azure-500 border-gray-300 rounded"
-                checked={settings.notifications.enabled}
-                onChange={(e) => updateSetting('notifications', 'enabled', e.target.checked)}
-              />
-              <label htmlFor="notifications-enabled" className="ml-2 text-sm text-gray-900">
-                Enable notifications
-              </label>
-            </div>
-            <div>
-              <label className="label">Microsoft Teams Webhook URL</label>
-              <input
-                type="url"
-                className="input"
-                value={settings.notifications.teamsWebhookUrl}
-                onChange={(e) => updateSetting('notifications', 'teamsWebhookUrl', e.target.value)}
-                placeholder="https://outlook.office.com/webhook/..."
-              />
-            </div>
-            <div>
-              <label className="label">Slack Webhook URL</label>
-              <input
-                type="url"
-                className="input"
-                value={settings.notifications.slackWebhookUrl}
-                onChange={(e) => updateSetting('notifications', 'slackWebhookUrl', e.target.value)}
-                placeholder="https://hooks.slack.com/services/..."
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Polling Configuration */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Polling Intervals</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="label">Work Items (cron expression)</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.polling.workItemsInterval}
-                onChange={(e) => updateSetting('polling', 'workItemsInterval', e.target.value)}
-                placeholder="*/15 * * * *"
-              />
-              <p className="text-xs text-gray-500 mt-1">Every 15 minutes</p>
-            </div>
-            <div>
-              <label className="label">Pipelines (cron expression)</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.polling.pipelineInterval}
-                onChange={(e) => updateSetting('polling', 'pipelineInterval', e.target.value)}
-                placeholder="*/10 * * * *"
-              />
-              <p className="text-xs text-gray-500 mt-1">Every 10 minutes</p>
-            </div>
-            <div>
-              <label className="label">Pull Requests (cron expression)</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.polling.pullRequestInterval}
-                onChange={(e) => updateSetting('polling', 'pullRequestInterval', e.target.value)}
-                placeholder="0 */2 * * *"
-              />
-              <p className="text-xs text-gray-500 mt-1">Every 2 hours</p>
-            </div>
-            <div>
-              <label className="label">Overdue Check (cron expression)</label>
-              <input
-                type="text"
-                className="input"
-                value={settings.polling.overdueCheckInterval}
-                onChange={(e) => updateSetting('polling', 'overdueCheckInterval', e.target.value)}
-                placeholder="0 9 * * *"
-              />
-              <p className="text-xs text-gray-500 mt-1">Daily at 9 AM</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex justify-end space-x-4">
-        <button
-          onClick={handleTestConnection}
-          disabled={testing}
-          className="btn btn-secondary flex items-center space-x-2"
-        >
-          <TestTube className="h-4 w-4" />
-          <span>{testing ? 'Testing...' : 'Test Connection'}</span>
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="btn btn-primary flex items-center space-x-2"
-        >
-          <Save className="h-4 w-4" />
-          <span>{saving ? 'Saving...' : 'Save Settings'}</span>
-        </button>
       </div>
     </div>
   )
