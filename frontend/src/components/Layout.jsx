@@ -12,10 +12,22 @@ import {
   Zap,
   RefreshCw,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Moon,
+  Sun,
+  Search,
+  Bell,
+  User
 } from 'lucide-react'
-import clsx from 'clsx'
+import { cn } from '@/lib/utils'
 import { useHealth } from '../contexts/HealthContext'
+import { ThemeProvider, useTheme } from '../contexts/ThemeContext'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -26,14 +38,98 @@ const navigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
-export default function Layout({ children }) {
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme()
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="w-9 px-0">
+          <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          <span className="sr-only">Toggle theme</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => setTheme('light')}>
+          Light
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme('dark')}>
+          Dark
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme('system')}>
+          System
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function HealthStatus() {
+  const { isConnected, isChecking } = useHealth()
+  
+  return (
+    <div className="flex items-center space-x-2">
+      <div className={cn(
+        "h-2 w-2 rounded-full",
+        isConnected ? "bg-green-500" : "bg-red-500"
+      )} />
+      <span className="text-sm text-muted-foreground">
+        {isChecking ? 'Checking...' : isConnected ? 'Connected' : 'Disconnected'}
+      </span>
+    </div>
+  )
+}
+
+function SidebarNav({ className, isCollapsed, onNavigate, ...props }) {
+  const location = useLocation()
+
+  return (
+    <nav className={cn("flex flex-col space-y-1", className)} {...props}>
+      {navigation.map((item) => {
+        const Icon = item.icon
+        const isActive = location.pathname === item.href
+        
+        return (
+          <TooltipProvider key={item.name}>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Button
+                  asChild
+                  variant={isActive ? "secondary" : "ghost"}
+                  className={cn(
+                    "w-full justify-start h-10",
+                    isCollapsed && "justify-center px-2",
+                    isActive && "bg-accent text-accent-foreground"
+                  )}
+                  onClick={onNavigate}
+                >
+                  <Link to={item.href}>
+                    <Icon className={cn("h-4 w-4", !isCollapsed && "mr-3")} />
+                    {!isCollapsed && <span>{item.name}</span>}
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              {isCollapsed && (
+                <TooltipContent side="right" className="font-medium">
+                  {item.name}
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        )
+      })}
+    </nav>
+  )
+}
+
+function LayoutContent({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     // Initialize from localStorage, default to false if not found
     const saved = localStorage.getItem('sidebarCollapsed')
     return saved ? JSON.parse(saved) : false
   })
-  const { isConnected, isChecking, checkConnection } = useHealth()
   const location = useLocation()
 
   // Save sidebar state to localStorage whenever it changes
@@ -41,189 +137,134 @@ export default function Layout({ children }) {
     localStorage.setItem('sidebarCollapsed', JSON.stringify(sidebarCollapsed))
   }, [sidebarCollapsed])
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Mobile sidebar */}
-      <div className={clsx(
-        'fixed inset-0 z-50 lg:hidden',
-        sidebarOpen ? 'block' : 'hidden'
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [location])
+
+  const sidebarContent = (
+    <div className="flex h-full flex-col">
+      {/* Logo */}
+      <div className={cn(
+        "flex h-16 items-center border-b px-4",
+        sidebarCollapsed && "px-2 justify-center"
       )}>
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
-        <div className="fixed inset-y-0 left-0 flex w-64 flex-col bg-white">
-          <div className="flex h-16 items-center justify-between px-4">
-            <div className="flex items-center">
-              <img src="/icon.svg" alt="DevOps Agent" className="h-8 w-8" />
-              <span className="ml-2 text-lg font-semibold text-gray-900">DevOps Agent</span>
-            </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <X className="h-6 w-6" />
-            </button>
-          </div>
-          <nav className="flex-1 space-y-1 px-2 py-4">
-            {navigation.map((item) => {
-              const Icon = item.icon
-              const isActive = location.pathname === item.href
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={clsx(
-                    'group flex items-center px-2 py-2 text-sm font-medium rounded-md',
-                    isActive
-                      ? 'bg-azure-100 text-azure-900'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  )}
-                >
-                  <Icon
-                    className={clsx(
-                      'mr-3 h-5 w-5',
-                      isActive ? 'text-azure-500' : 'text-gray-400 group-hover:text-gray-500'
-                    )}
-                  />
-                  {item.name}
-                </Link>
-              )
-            })}
-          </nav>
-        </div>
+        <img src="/icon.svg" alt="DevOps Agent" className="h-8 w-8 flex-shrink-0" />
+        {!sidebarCollapsed && (
+          <span className="ml-3 text-xl font-semibold">DevOps Agent</span>
+        )}
       </div>
 
+      {/* Navigation */}
+      <div className="flex-1 overflow-auto py-4 px-3">
+        <SidebarNav 
+          isCollapsed={sidebarCollapsed} 
+          onNavigate={() => setSidebarOpen(false)}
+        />
+      </div>
+
+      {/* Health Status */}
+      {!sidebarCollapsed && (
+        <>
+          <Separator />
+          <div className="p-4">
+            <HealthStatus />
+          </div>
+        </>
+      )}
+
+      {/* Collapse Toggle */}
+      <div className="hidden lg:block border-t">
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "w-full h-12 justify-center",
+            !sidebarCollapsed && "justify-end"
+          )}
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        >
+          {sidebarCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Mobile sidebar */}
+      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SheetContent side="left" className="w-72 p-0">
+          {sidebarContent}
+        </SheetContent>
+      </Sheet>
+
       {/* Desktop sidebar */}
-      <div className={clsx(
-        'hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col transition-all duration-300 ease-in-out z-30',
-        sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'
+      <div className={cn(
+        "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col lg:border-r lg:bg-card lg:transition-all lg:duration-300",
+        sidebarCollapsed ? "lg:w-16" : "lg:w-72"
       )}>
-        <div className="flex flex-col flex-grow bg-white border-r border-gray-200 shadow-sm">
-          <div className={clsx(
-            'flex h-16 items-center transition-all duration-300',
-            sidebarCollapsed ? 'justify-center px-2' : 'px-4'
-          )}>
-            <img src="/icon.svg" alt="DevOps Agent" className="h-8 w-8 flex-shrink-0" />
-            {!sidebarCollapsed && (
-              <span className="ml-2 text-lg font-semibold text-gray-900 whitespace-nowrap overflow-hidden">
-                DevOps Agent
-              </span>
-            )}
-          </div>
-
-          <nav className={clsx(
-            'flex-1 space-y-1 py-4 transition-all duration-300 border-t border-gray-200',
-            sidebarCollapsed ? 'px-2' : 'px-2'
-          )}>
-            {navigation.map((item) => {
-              const Icon = item.icon
-              const isActive = location.pathname === item.href
-              return (
-                <div key={item.name} className="relative group">
-                  <Link
-                    to={item.href}
-                    className={clsx(
-                      'flex items-center text-sm font-medium rounded-md transition-all duration-200 relative',
-                      sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-2 py-2',
-                      isActive
-                        ? 'bg-azure-100 text-azure-900'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    )}
-                  >
-                    <Icon
-                      className={clsx(
-                        'h-5 w-5 flex-shrink-0 transition-all duration-200',
-                        sidebarCollapsed ? 'mr-0' : 'mr-3',
-                        isActive ? 'text-azure-500' : 'text-gray-400 group-hover:text-gray-500'
-                      )}
-                    />
-                    {!sidebarCollapsed && (
-                      <span className="whitespace-nowrap overflow-hidden">{item.name}</span>
-                    )}
-                  </Link>
-                  
-                  {/* Tooltip for collapsed state */}
-                  {sidebarCollapsed && (
-                    <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50 top-1/2 transform -translate-y-1/2">
-                      {item.name}
-                      <div className="absolute right-full top-1/2 transform -translate-y-1/2 border-4 border-transparent border-r-gray-900"></div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </nav>
-
-          {/* Toggle control at bottom */}
-          <div className="border-t border-gray-200">
-            <div
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className={clsx(
-                'flex items-center cursor-pointer transition-all duration-200 hover:bg-gray-50 py-3',
-                sidebarCollapsed ? 'justify-center px-2' : 'justify-end px-4'
-              )}
-              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              <span className="text-gray-400 hover:text-gray-600 transition-colors duration-200 text-sm font-mono select-none">
-                {sidebarCollapsed ? '>>>' : '<<<'}
-              </span>
-            </div>
-          </div>
-        </div>
+        {sidebarContent}
       </div>
 
       {/* Main content */}
-      <div className={clsx(
-        'transition-all duration-300 ease-in-out',
-        sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64'
+      <div className={cn(
+        "flex flex-col lg:transition-all lg:duration-300",
+        sidebarCollapsed ? "lg:pl-16" : "lg:pl-72"
       )}>
         {/* Top bar */}
-        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
-          <button
-            type="button"
-            className="-m-2.5 p-2.5 text-gray-700 lg:hidden"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Menu className="h-6 w-6" />
-          </button>
-
-          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-            <div className="flex flex-1 items-center">
-              <h1 className="text-lg font-semibold text-gray-900">
-                {navigation.find(item => item.href === location.pathname)?.name || 'Dashboard'}
-              </h1>
+        <header className="sticky top-0 z-40 flex h-16 items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="flex w-full items-center justify-between px-4 lg:px-6">
+            <div className="flex items-center space-x-4">
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="lg:hidden"
+                    onClick={() => setSidebarOpen(true)}
+                  >
+                    <Menu className="h-5 w-5" />
+                    <span className="sr-only">Toggle navigation menu</span>
+                  </Button>
+                </SheetTrigger>
+              </Sheet>
             </div>
-            <div className="flex items-center gap-x-4 lg:gap-x-6">
-              <div className="flex items-center space-x-2">
-                <div className={clsx(
-                  'status-dot',
-                  isChecking ? 'status-dot-warning' : isConnected ? 'status-dot-success' : 'status-dot-error'
-                )}></div>
-                <span className="text-sm text-gray-600">
-                  {isChecking ? 'Checking...' : isConnected ? 'Connected' : 'Disconnected'}
-                </span>
-                <button
-                  onClick={checkConnection}
-                  disabled={isChecking}
-                  className={clsx(
-                    'p-1 rounded-md text-gray-400 hover:text-gray-600 transition-colors',
-                    isChecking && 'animate-spin'
-                  )}
-                  title="Refresh connection status"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </button>
-              </div>
+
+            <div className="flex items-center space-x-2">
+              <Button variant="ghost" size="sm" className="w-9 px-0">
+                <Search className="h-4 w-4" />
+                <span className="sr-only">Search</span>
+              </Button>
+              <Button variant="ghost" size="sm" className="w-9 px-0">
+                <Bell className="h-4 w-4" />
+                <span className="sr-only">Notifications</span>
+              </Button>
+              <ThemeToggle />
             </div>
           </div>
-        </div>
+        </header>
 
         {/* Page content */}
-        <main className="py-6">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <main className="flex-1">
+          <div className="container mx-auto py-6 px-4 lg:px-6">
             {children}
           </div>
         </main>
       </div>
     </div>
+  )
+}
+
+export default function Layout({ children }) {
+  return (
+    <TooltipProvider>
+      <ThemeProvider defaultTheme="system" storageKey="devops-agent-theme">
+        <LayoutContent>{children}</LayoutContent>
+      </ThemeProvider>
+    </TooltipProvider>
   )
 }
