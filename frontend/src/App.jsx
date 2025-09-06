@@ -1,6 +1,6 @@
 import React from 'react'
 import { Routes, Route } from 'react-router-dom'
-import Layout from './components/Layout'
+import AppShell from './components/AppShell'
 import Dashboard from './pages/Dashboard'
 import Settings from './pages/Settings'
 import Logs from './pages/Logs'
@@ -12,7 +12,7 @@ import { HealthProvider } from './contexts/HealthContext'
 function App() {
   return (
     <HealthProvider>
-      <Layout>
+      <AppShell>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/work-items" element={<WorkItems />} />
@@ -21,7 +21,7 @@ function App() {
           <Route path="/logs" element={<Logs />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
-      </Layout>
+      </AppShell>
     </HealthProvider>
   )
 }

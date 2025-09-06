@@ -6,15 +6,93 @@ import {
   AlertTriangle,
   TrendingUp,
   Clock,
-  Users,
   Activity,
-  RefreshCw
+  RefreshCw,
+  Zap,
+  CheckCircle,
+  XCircle
 } from 'lucide-react'
 import { apiService } from '../api/apiService'
 import { useHealth } from '../contexts/HealthContext'
-import LoadingSpinner from '../components/LoadingSpinner'
-import ErrorMessage from '../components/ErrorMessage'
-import SkeletonCard from '../components/SkeletonCard'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import { Button } from '../components/ui/button'
+import { PageHeader } from '../components/ui/page-header'
+import { Skeleton, SkeletonCard } from '../components/ui/skeleton'
+import { EmptyState, ErrorState } from '../components/ui/empty-state'
+
+// Metric Card Component
+const MetricCard = ({ title, value, subtext, icon: Icon, color = 'primary', loading = false }) => {
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center space-x-4">
+            <Skeleton className="h-12 w-12 rounded-xl" />
+            <div className="space-y-2 flex-1">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-8 w-12" />
+              <Skeleton className="h-3 w-32" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const colorClasses = {
+    primary: 'bg-primary-100 text-primary-600 dark:bg-primary-600/10 dark:text-primary-400',
+    success: 'bg-success-50 text-success-600 dark:bg-success-600/10 dark:text-success-500',
+    warning: 'bg-warning-50 text-warning-600 dark:bg-warning-600/10 dark:text-warning-500',
+    info: 'bg-info-50 text-info-600 dark:bg-info-600/10 dark:text-info-500'
+  }
+
+  return (
+    <Card className="transition-all duration-200 hover:shadow-md">
+      <CardContent className="p-6">
+        <div className="flex items-center space-x-4">
+          <div className={`p-3 rounded-xl ${colorClasses[color]}`}>
+            <Icon className="h-6 w-6" />
+          </div>
+          <div className="flex-1 space-y-1">
+            <p className="text-body-sm font-medium text-neutral-600 dark:text-neutral-400">
+              {title}
+            </p>
+            <p className="text-h2 font-bold text-neutral-900 dark:text-neutral-50">
+              {value}
+            </p>
+            <p className="text-caption text-neutral-500 dark:text-neutral-400">
+              {subtext}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Activity Item Component
+const ActivityItem = ({ title, timestamp, type = 'info' }) => {
+  const typeColors = {
+    info: 'bg-info-500',
+    success: 'bg-success-500',
+    warning: 'bg-warning-500',
+    error: 'bg-error-500'
+  }
+
+  return (
+    <div className="flex items-start space-x-3 py-3 first:pt-0 last:pb-0">
+      <div className={`mt-1 h-2 w-2 rounded-full ${typeColors[type]} shrink-0`} />
+      <div className="flex-1 min-w-0">
+        <p className="text-body-sm font-medium text-neutral-900 dark:text-neutral-50">
+          {title}
+        </p>
+        <p className="text-caption text-neutral-500 dark:text-neutral-400">
+          {new Date(timestamp).toLocaleString()}
+        </p>
+      </div>
+    </div>
+  )
+}
 
 export default function Dashboard() {
   const [initialLoading, setInitialLoading] = useState(true)
@@ -48,326 +126,220 @@ export default function Dashboard() {
         logs: true
       })
 
-      // Phase 1: Load critical work items data first (fastest)
-      try {
-        const workItems = await apiService.getCurrentSprintSummary()
+      const [workItemsResponse, buildsResponse, pullRequestsResponse, logsResponse] = await Promise.allSettled([
+        apiService.getWorkItems(),
+        apiService.getBuilds(),
+        apiService.getPullRequests(),
+        apiService.getLogs()
+      ])
+
+      // Process work items
+      if (workItemsResponse.status === 'fulfilled') {
+        const workItems = workItemsResponse.value?.value || []
         setStats(prev => ({
           ...prev,
           workItems: {
-            total: workItems.total || 0,
-            active: workItems.active || 0,
-            completed: workItems.completed || 0,
-            overdue: workItems.overdue || 0
+            total: workItems.length,
+            active: workItems.filter(item => !['Closed', 'Done'].includes(item.fields?.['System.State'])).length,
+            completed: workItems.filter(item => ['Closed', 'Done'].includes(item.fields?.['System.State'])).length,
+            overdue: 0 // Would need to calculate based on dates
           }
         }))
-        setLoadingStates(prev => ({ ...prev, workItems: false }))
-        setInitialLoading(false) // Show UI immediately after first data loads
-      } catch (err) {
-        console.error('Failed to load work items:', err)
-        setLoadingStates(prev => ({ ...prev, workItems: false }))
       }
 
-      // Phase 2: Load remaining data in parallel
-      const [builds, pullRequests, logs] = await Promise.allSettled([
-        apiService.getRecentBuilds(),
-        apiService.getPullRequests(),
-        apiService.getLogs({ limit: 10 })
-      ])
-
-      // Process builds data
-      if (builds.status === 'fulfilled') {
-        const buildsData = builds.value
+      // Process builds
+      if (buildsResponse.status === 'fulfilled') {
+        const builds = buildsResponse.value?.value || []
         setStats(prev => ({
           ...prev,
           builds: {
-            total: buildsData.count || 0,
-            succeeded: buildsData.value?.filter(b => b.result === 'succeeded').length || 0,
-            failed: buildsData.value?.filter(b => b.result === 'failed').length || 0
+            total: builds.length,
+            succeeded: builds.filter(build => build.result === 'succeeded').length,
+            failed: builds.filter(build => build.result === 'failed').length
           }
         }))
       }
-      setLoadingStates(prev => ({ ...prev, builds: false }))
 
-      // Process pull requests data
-      if (pullRequests.status === 'fulfilled') {
-        const prData = pullRequests.value
+      // Process pull requests
+      if (pullRequestsResponse.status === 'fulfilled') {
+        const prs = pullRequestsResponse.value?.value || []
         setStats(prev => ({
           ...prev,
           pullRequests: {
-            total: prData.count || 0,
-            active: prData.value?.filter(pr => pr.status === 'active').length || 0,
-            idle: prData.idle || 0
+            total: prs.length,
+            active: prs.filter(pr => pr.status === 'active').length,
+            idle: prs.filter(pr => pr.status !== 'active').length
           }
         }))
       }
-      setLoadingStates(prev => ({ ...prev, pullRequests: false }))
 
-      // Process recent activity
-      if (logs.status === 'fulfilled') {
-        setRecentActivity(logs.value.logs || [])
+      // Process logs for recent activity
+      if (logsResponse.status === 'fulfilled') {
+        const logs = logsResponse.value || []
+        setRecentActivity(logs.slice(0, 5).map(log => ({
+          title: log.message || 'System event',
+          timestamp: log.timestamp || new Date().toISOString(),
+          type: log.level === 'error' ? 'error' : log.level === 'warn' ? 'warning' : 'info'
+        })))
       }
-      setLoadingStates(prev => ({ ...prev, logs: false }))
 
-    } catch (err) {
-      setError('Failed to load dashboard data')
-      console.error('Dashboard error:', err)
-      setInitialLoading(false)
       setLoadingStates({
         workItems: false,
         builds: false,
         pullRequests: false,
         logs: false
       })
+
+    } catch (err) {
+      console.error('Error loading dashboard data:', err)
+      setError(err.message)
+    } finally {
+      setInitialLoading(false)
     }
   }
 
-  // Only show full loading spinner on initial load with error
-  if (initialLoading && error) {
-    return <LoadingSpinner />
+  const handleRefresh = () => {
+    loadDashboardData()
   }
 
   if (error && initialLoading) {
-    return <ErrorMessage message={error} onRetry={loadDashboardData} />
+    return <ErrorState message={error} onRetry={handleRefresh} />
   }
 
-  const statCards = [
-    {
-      title: 'Work Items',
-      value: stats.workItems.total,
-      subtitle: `${stats.workItems.active} active, ${stats.workItems.overdue} overdue`,
-      icon: CheckSquare,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50'
-    },
-    {
-      title: 'Recent Builds',
-      value: stats.builds.total,
-      subtitle: `${stats.builds.succeeded} succeeded, ${stats.builds.failed} failed`,
-      icon: GitBranch,
-      color: stats.builds.failed > 0 ? 'text-red-600' : 'text-green-600',
-      bgColor: stats.builds.failed > 0 ? 'bg-red-50' : 'bg-green-50'
-    },
-    {
-      title: 'Pull Requests',
-      value: stats.pullRequests.total,
-      subtitle: `${stats.pullRequests.active} active, ${stats.pullRequests.idle} idle`,
-      icon: GitPullRequest,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50'
-    },
-    {
-      title: 'System Status',
-      value: isChecking ? 'Checking...' : isConnected ? 'Healthy' : 'Unhealthy',
-      subtitle: isChecking ? 'Checking connection...' : 
-                isConnected ? `Uptime: ${healthData?.uptime ? Math.floor(healthData.uptime / 3600) + 'h' : 'N/A'}` : 
-                'Backend disconnected',
-      icon: Activity,
-      color: isChecking ? 'text-yellow-600' : isConnected ? 'text-green-600' : 'text-red-600',
-      bgColor: isChecking ? 'bg-yellow-50' : isConnected ? 'bg-green-50' : 'bg-red-50'
-    }
-  ]
+  const anyLoading = Object.values(loadingStates).some(loading => loading)
 
   return (
     <div className="space-y-6">
-      {/* Header with Refresh Button */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
-          <p className="text-gray-600">Overview of your Azure DevOps monitoring</p>
-        </div>
-        <button
-          onClick={loadDashboardData}
-          disabled={initialLoading || Object.values(loadingStates).some(loading => loading)}
-          className="group inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-gradient-to-r from-gray-50 to-gray-100 border-0 rounded-xl hover:from-blue-50 hover:to-indigo-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-60 disabled:cursor-not-allowed transition-colors duration-300"
-        >
-          <RefreshCw className={`h-4 w-4 transition-all duration-300 ${(initialLoading || Object.values(loadingStates).some(loading => loading)) ? 'animate-spin text-blue-500' : 'group-hover:text-blue-500 group-hover:rotate-180'}`} />
-          <span className="font-medium">{(initialLoading || Object.values(loadingStates).some(loading => loading)) ? 'Refreshing...' : 'Refresh'}</span>
-        </button>
+      <PageHeader
+        title="Dashboard"
+        description="Overview of your Azure DevOps monitoring"
+        actions={[
+          <Button
+            key="refresh"
+            onClick={handleRefresh}
+            disabled={anyLoading}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${anyLoading ? 'animate-spin' : ''}`} />
+            {anyLoading ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        ]}
+      />
+
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard
+          title="Work Items"
+          value={stats.workItems.total}
+          subtext={`${stats.workItems.active} active, ${stats.workItems.overdue} overdue`}
+          icon={CheckSquare}
+          color="primary"
+          loading={loadingStates.workItems}
+        />
+        <MetricCard
+          title="Recent Builds"
+          value={stats.builds.total}
+          subtext={`${stats.builds.succeeded} succeeded, ${stats.builds.failed} failed`}
+          icon={GitBranch}
+          color="success"
+          loading={loadingStates.builds}
+        />
+        <MetricCard
+          title="Pull Requests"
+          value={stats.pullRequests.total}
+          subtext={`${stats.pullRequests.active} active, ${stats.pullRequests.idle} idle`}
+          icon={GitPullRequest}
+          color="info"
+          loading={loadingStates.pullRequests}
+        />
+        <MetricCard
+          title="System Status"
+          value={isConnected ? "Healthy" : "Offline"}
+          subtext={lastCheck ? `Uptime: 0h` : 'Checking...'}
+          icon={isConnected ? CheckCircle : XCircle}
+          color={isConnected ? "success" : "warning"}
+          loading={isChecking}
+        />
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {statCards.map((stat, index) => {
-          const Icon = stat.icon
-          const isSystemStatus = stat.title === 'System Status'
-          const tooltipText = isSystemStatus && lastCheck 
-            ? `Last checked: ${lastCheck.toLocaleTimeString()}`
-            : undefined
-          
-          // Show skeleton for loading states
-          const isLoading = (
-            (stat.title === 'Work Items' && loadingStates.workItems) ||
-            (stat.title === 'Recent Builds' && loadingStates.builds) ||
-            (stat.title === 'Pull Requests' && loadingStates.pullRequests) ||
-            (stat.title === 'System Status' && false) // System status loads immediately
-          )
-          
-          if (isLoading) {
-            return <SkeletonCard key={index} />
-          }
-            
-          return (
-            <div 
-              key={index} 
-              className="card hover:shadow-lg transition-shadow duration-200"
-              title={tooltipText}
-            >
-              <div className="flex items-center">
-                <div className={`p-2 rounded-lg ${stat.bgColor} transition-all duration-200 hover:scale-105`}>
-                  <Icon className={`h-6 w-6 ${stat.color}`} />
+      {/* Details Grid */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Active Alerts */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-warning-600" />
+              Active Alerts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingStates.logs ? (
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ) : (
+              <div className="flex items-center space-x-3 py-4">
+                <div className="p-2 bg-success-50 text-success-600 rounded-lg dark:bg-success-600/10">
+                  <TrendingUp className="h-5 w-5" />
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-semibold text-gray-900">{stat.value}</p>
+                <div>
+                  <p className="text-body-sm font-medium text-neutral-900 dark:text-neutral-50">
+                    All systems healthy
+                  </p>
+                  <p className="text-caption text-neutral-500 dark:text-neutral-400">
+                    No active alerts
+                  </p>
                 </div>
               </div>
-              <p className="mt-2 text-sm text-gray-500">{stat.subtitle}</p>
-              
-              {/* Add progress indicator for Work Items */}
-              {stat.title === 'Work Items' && stats.workItems.total > 0 && (
-                <div className="mt-3">
-                  <div className="flex justify-between text-xs text-gray-600 mb-1">
-                    <span>Completion</span>
-                    <span>{Math.round((stats.workItems.completed / stats.workItems.total) * 100)}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-500" 
-                      style={{ width: `${Math.round((stats.workItems.completed / stats.workItems.total) * 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
-              
-              {/* Add success rate for Builds */}
-              {stat.title === 'Recent Builds' && stats.builds.total > 0 && (
-                <div className="mt-3">
-                  <div className="flex justify-between text-xs text-gray-600 mb-1">
-                    <span>Success Rate</span>
-                    <span>{Math.round((stats.builds.succeeded / stats.builds.total) * 100)}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-green-600 h-2 rounded-full transition-all duration-500" 
-                      style={{ width: `${Math.round((stats.builds.succeeded / stats.builds.total) * 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Alerts */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Active Alerts</h3>
-            <AlertTriangle className="h-5 w-5 text-yellow-500" />
-          </div>
-          <div className="space-y-3">
-            {(loadingStates.workItems || loadingStates.builds || loadingStates.pullRequests) ? (
-              // Show skeleton loading for alerts
-              Array.from({ length: 2 }).map((_, index) => (
-                <div key={index} className="flex items-center p-3 bg-gray-50 rounded-lg animate-pulse">
-                  <div className="h-5 w-5 bg-gray-300 rounded mr-3"></div>
-                  <div className="flex-1">
-                    <div className="h-4 bg-gray-300 rounded w-3/4 mb-1"></div>
-                    <div className="h-3 bg-gray-300 rounded w-1/2"></div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <>
-                {stats.workItems.overdue > 0 && (
-                  <div className="flex items-center p-3 bg-red-50 rounded-lg">
-                    <Clock className="h-5 w-5 text-red-500 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-red-800">
-                        {stats.workItems.overdue} overdue work items
-                      </p>
-                      <p className="text-xs text-red-600">Require immediate attention</p>
-                    </div>
-                  </div>
-                )}
-                {stats.builds.failed > 0 && (
-                  <div className="flex items-center p-3 bg-red-50 rounded-lg">
-                    <GitBranch className="h-5 w-5 text-red-500 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-red-800">
-                        {stats.builds.failed} failed builds
-                      </p>
-                      <p className="text-xs text-red-600">Check build logs for details</p>
-                    </div>
-                  </div>
-                )}
-                {stats.pullRequests.idle > 0 && (
-                  <div className="flex items-center p-3 bg-yellow-50 rounded-lg">
-                    <GitPullRequest className="h-5 w-5 text-yellow-500 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-yellow-800">
-                        {stats.pullRequests.idle} idle pull requests
-                      </p>
-                      <p className="text-xs text-yellow-600">No activity for 48+ hours</p>
-                    </div>
-                  </div>
-                )}
-                {stats.workItems.overdue === 0 && stats.builds.failed === 0 && stats.pullRequests.idle === 0 && (
-                  <div className="flex items-center p-3 bg-green-50 rounded-lg">
-                    <TrendingUp className="h-5 w-5 text-green-500 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-green-800">All systems healthy</p>
-                      <p className="text-xs text-green-600">No active alerts</p>
-                    </div>
-                  </div>
-                )}
-              </>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Recent Activity */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Recent Activity</h3>
-            <Activity className="h-5 w-5 text-gray-400" />
-          </div>
-          <div className="space-y-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary-600" />
+              Recent Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             {loadingStates.logs ? (
-              // Show skeleton loading for recent activity
-              Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="flex items-start space-x-3 animate-pulse">
-                  <div className="flex-shrink-0">
-                    <div className="w-2 h-2 bg-gray-300 rounded-full mt-2"></div>
+              <div className="space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-start space-x-3">
+                    <Skeleton className="mt-1 h-2 w-2 rounded-full" />
+                    <div className="space-y-1 flex-1">
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="h-4 bg-gray-300 rounded w-3/4 mb-1"></div>
-                    <div className="h-3 bg-gray-300 rounded w-1/2"></div>
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             ) : recentActivity.length > 0 ? (
-              recentActivity.slice(0, 5).map((activity, index) => (
-                <div key={index} className="flex items-start space-x-3">
-                  <div className="flex-shrink-0">
-                    <div className="w-2 h-2 bg-azure-500 rounded-full mt-2"></div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 truncate">{activity.message}</p>
-                    <p className="text-xs text-gray-500">{activity.timestamp}</p>
-                  </div>
-                </div>
-              ))
+              <div className="space-y-1">
+                {recentActivity.map((activity, index) => (
+                  <ActivityItem
+                    key={index}
+                    title={activity.title}
+                    timestamp={activity.timestamp}
+                    type={activity.type}
+                  />
+                ))}
+              </div>
             ) : (
-              <div className="text-center py-4">
-                <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No recent activity</p>
+              <div className="py-8 text-center">
+                <Activity className="h-12 w-12 mx-auto text-neutral-400 mb-4" />
+                <p className="text-body-sm text-neutral-500 dark:text-neutral-400">
+                  No recent activity
+                </p>
               </div>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
