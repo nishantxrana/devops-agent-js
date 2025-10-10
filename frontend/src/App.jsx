@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
@@ -13,7 +13,6 @@ import SignUp from './pages/SignUp'
 import { HealthProvider } from './contexts/HealthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import clarityService from './services/clarity'
 
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
@@ -54,11 +53,6 @@ function AppContent() {
 }
 
 function App() {
-  // Initialize Clarity analytics
-  useEffect(() => {
-    clarityService.init()
-  }, [])
-
   return (
     <ThemeProvider>
       <AuthProvider>

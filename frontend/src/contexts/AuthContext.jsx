@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
-import clarityService from '../services/clarity';
 
 const AuthContext = createContext();
 
@@ -79,10 +78,6 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', newToken);
       localStorage.setItem('user', JSON.stringify(userData));
       axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-      
-      // Identify user in Clarity analytics
-      clarityService.identifyUser(userData._id || userData.id, userData.email);
-      clarityService.setTag('userRole', userData.role || 'user');
       
       return { success: true };
     } catch (error) {

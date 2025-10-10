@@ -22,7 +22,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Switch } from '../components/ui/switch'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { useHealth } from '../contexts/HealthContext'
-import clarityService from '../services/clarity'
 
 export default function Settings() {
   const [loading, setLoading] = useState(true)
@@ -242,11 +241,6 @@ export default function Settings() {
       }
       
       await axios.put('/api/settings', backendSettings)
-      
-      // Track settings save and AI provider
-      clarityService.trackEvent('settings-saved')
-      clarityService.setTag('aiProvider', settings.ai.provider)
-      
       setTestResult({ success: true, message: 'Settings saved successfully!' })
     } catch (error) {
       setTestResult({ success: false, message: 'Failed to save settings: ' + error.message })

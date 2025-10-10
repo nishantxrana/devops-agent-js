@@ -17,7 +17,6 @@ import { apiService } from '../api/apiService'
 import { useHealth } from '../contexts/HealthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ErrorMessage from '../components/ErrorMessage'
-import clarityService from '../services/clarity'
 
 export default function Dashboard() {
   const [initialLoading, setInitialLoading] = useState(true)
@@ -73,7 +72,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData()
-    clarityService.trackEvent('dashboard-viewed')
   }, [])
 
   const handleSync = async () => {
