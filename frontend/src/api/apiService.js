@@ -74,6 +74,11 @@ export const apiService = {
     return response.data
   },
 
+  async getSprintBurndown(days = 14) {
+    const response = await api.get(`/charts/sprint-burndown?days=${days}`)
+    return response.data
+  },
+
   async getOverdueItems() {
     const response = await api.get('/work-items/overdue')
     return response.data

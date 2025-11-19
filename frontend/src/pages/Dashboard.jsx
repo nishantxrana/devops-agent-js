@@ -17,7 +17,7 @@ import { apiService } from '../api/apiService'
 import { useHealth } from '../contexts/HealthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ErrorMessage from '../components/ErrorMessage'
-import { BuildSuccessRateTrend } from '../components/BuildSuccessRateTrend'
+import { ChartTabs } from '../components/ChartTabs'
 
 export default function Dashboard() {
   const [initialLoading, setInitialLoading] = useState(true)
@@ -529,9 +529,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Build Success Rate Trend Chart */}
+      {/* Charts Tabs */}
       <div className="animate-fade-in" style={{animationDelay: '0.3s'}}>
-        <BuildSuccessRateTrend refreshTrigger={chartRefreshTrigger} />
+        <ChartTabs refreshTrigger={chartRefreshTrigger} />
       </div>
     </div>
   )

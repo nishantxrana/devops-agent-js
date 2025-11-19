@@ -420,6 +420,95 @@ router.post('/polling/emergency-cleanup', async (req, res) => {
   }
 });
 
+// Helper function to calculate sprint burndown
+function calculateSprintBurndown(workItems, sprintDays) {
+  const now = new Date();
+  const sprintStart = new Date(now.getTime() - (sprintDays - 1) * 24 * 60 * 60 * 1000);
+  
+  // Calculate totals
+  const totalItems = workItems.length;
+  const completedItems = workItems.filter(item => 
+    item.fields['System.State'] === 'Closed' || 
+    item.fields['System.State'] === 'Done'
+  ).length;
+  
+  // Calculate story points if available
+  const totalStoryPoints = workItems.reduce((sum, item) => {
+    const points = item.fields['Microsoft.VSTS.Scheduling.StoryPoints'] || 1;
+    return sum + points;
+  }, 0);
+  
+  const completedStoryPoints = workItems
+    .filter(item => item.fields['System.State'] === 'Closed' || item.fields['System.State'] === 'Done')
+    .reduce((sum, item) => {
+      const points = item.fields['Microsoft.VSTS.Scheduling.StoryPoints'] || 1;
+      return sum + points;
+    }, 0);
+
+  // Generate daily burndown data
+  const burndownData = [];
+  for (let i = 0; i < sprintDays; i++) {
+    const date = new Date(sprintStart.getTime() + i * 24 * 60 * 60 * 1000);
+    const daysPassed = i + 1;
+    
+    // Ideal burndown (linear)
+    const idealRemaining = Math.max(0, totalStoryPoints - (totalStoryPoints / sprintDays) * daysPassed);
+    
+    // Actual progress (simplified - using current completion rate)
+    const progressRate = daysPassed / sprintDays;
+    const actualCompleted = Math.min(completedStoryPoints, totalStoryPoints * progressRate);
+    const actualRemaining = Math.max(0, totalStoryPoints - actualCompleted);
+    
+    burndownData.push({
+      date: date.toISOString().split('T')[0],
+      remaining: Math.round(actualRemaining),
+      completed: Math.round(actualCompleted),
+      ideal: Math.round(idealRemaining)
+    });
+  }
+
+  return {
+    sprintInfo: {
+      name: "Current Sprint",
+      startDate: sprintStart.toISOString().split('T')[0],
+      endDate: now.toISOString().split('T')[0],
+      totalStoryPoints,
+      totalWorkItems: totalItems,
+      completedWorkItems: completedItems
+    },
+    burndownData,
+    velocity: {
+      average: Math.round((completedStoryPoints / sprintDays) * 10) / 10,
+      trend: completedItems > totalItems * 0.5 ? "on-track" : "behind"
+    }
+  };
+}
+
+// Chart endpoints
+router.get('/charts/sprint-burndown', authenticate, async (req, res) => {
+  try {
+    const userSettings = await getUserSettings(req.user._id);
+    
+    if (!userSettings.azureDevOps?.organization || !userSettings.azureDevOps?.pat) {
+      return res.status(400).json({ error: 'Azure DevOps configuration required' });
+    }
+
+    const days = parseInt(req.query.days) || 14; // Default 14-day sprint
+    const client = azureDevOpsClient.createUserClient(userSettings.azureDevOps);
+    
+    // Get current sprint work items using existing method
+    const workItems = await client.getCurrentSprintWorkItems();
+    
+    // Calculate burndown data
+    const burndownData = calculateSprintBurndown(workItems.value || [], days);
+    
+    res.json(burndownData);
+  } catch (error) {
+    logger.error('Error fetching sprint burndown data:', error);
+    res.status(500).json({ error: 'Failed to fetch sprint burndown data' });
+  }
+});
+
 // Builds endpoints
 router.get('/builds/recent', async (req, res) => {
   try {
