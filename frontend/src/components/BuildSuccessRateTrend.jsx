@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup } from "@/components/ui/select"
 import { apiService } from '../api/apiService'
 import { useState, useEffect } from 'react'
 
@@ -17,6 +18,7 @@ const chartConfig = {
 export function BuildSuccessRateTrend({ refreshTrigger }) {
   const [chartData, setChartData] = useState([])
   const [loading, setLoading] = useState(true)
+  const [dateRange, setDateRange] = useState("30")
   const [stats, setStats] = useState({
     current7Day: 0,
     overall30Day: 0,
@@ -25,9 +27,16 @@ export function BuildSuccessRateTrend({ refreshTrigger }) {
     trend: 'stable'
   })
 
+  const dateRangeOptions = [
+    { value: "1", label: "Last 1 day" },
+    { value: "15", label: "Last 15 days" },
+    { value: "30", label: "Last 30 days" },
+    { value: "90", label: "Last 90 days" }
+  ]
+
   useEffect(() => {
     fetchBuildData()
-  }, [])
+  }, [dateRange])
 
   useEffect(() => {
     if (refreshTrigger) {
@@ -37,11 +46,11 @@ export function BuildSuccessRateTrend({ refreshTrigger }) {
 
   const fetchBuildData = async () => {
     try {
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      const daysAgo = new Date(Date.now() - parseInt(dateRange) * 24 * 60 * 60 * 1000).toISOString()
       const now = new Date().toISOString()
       
       const response = await apiService.getRecentBuilds(200, 'all', {
-        minTime: thirtyDaysAgo,
+        minTime: daysAgo,
         maxTime: now
       })
 
@@ -127,8 +136,30 @@ export function BuildSuccessRateTrend({ refreshTrigger }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Build Success Rate Trend</CardTitle>
-        <CardDescription>Last 30 days pipeline health</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Build Success Rate Trend</CardTitle>
+            <CardDescription>Pipeline health over selected period</CardDescription>
+          </div>
+          <Select 
+            value={dateRange} 
+            onValueChange={setDateRange}
+            modal={false}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {dateRangeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="min-h-[300px] w-full">
