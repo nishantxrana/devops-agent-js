@@ -450,16 +450,20 @@ class AzureDevOpsClient {
     }
   }
 
-  async getRecentBuilds(top = 10) {
+  async getRecentBuilds(top = 10, options = {}) {
     this.ensureInitialized();
     try {
-      const response = await this.client.get('/build/builds', {
-        params: {
-          'api-version': '7.0',
-          '$top': top,
-          'statusFilter': 'completed'
-        }
-      });
+      const params = {
+        'api-version': '7.0',
+        '$top': top,
+        'statusFilter': 'completed'
+      };
+      
+      // Add date range if provided
+      if (options.minTime) params.minTime = options.minTime;
+      if (options.maxTime) params.maxTime = options.maxTime;
+      
+      const response = await this.client.get('/build/builds', { params });
       return response.data;
     } catch (error) {
       logger.error('Error fetching recent builds:', error);

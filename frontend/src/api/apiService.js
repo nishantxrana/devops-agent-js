@@ -92,10 +92,16 @@ export const apiService = {
   },
 
   // Builds/Pipelines
-  async getRecentBuilds(limit = 20, repository = 'all') {
+  async getRecentBuilds(limit = 20, repository = 'all', dateRange = null) {
     const params = new URLSearchParams({ limit: limit.toString() });
     if (repository && repository !== 'all') {
       params.append('repository', repository);
+    }
+    if (dateRange?.minTime) {
+      params.append('minTime', dateRange.minTime);
+    }
+    if (dateRange?.maxTime) {
+      params.append('maxTime', dateRange.maxTime);
     }
     const response = await api.get(`/builds/recent?${params.toString()}`)
     return response.data

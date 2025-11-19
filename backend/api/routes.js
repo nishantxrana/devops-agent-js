@@ -429,12 +429,17 @@ router.get('/builds/recent', async (req, res) => {
       return res.status(400).json({ error: 'Azure DevOps configuration required' });
     }
     
-    // Get limit from query parameter, default to 20, min 10, max 50
-    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 10), 50);
+    // Get limit from query parameter, default to 20, min 10, max 200 (increased for date ranges)
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 10), 200);
     const repositoryFilter = req.query.repository;
     
+    // Date range options
+    const options = {};
+    if (req.query.minTime) options.minTime = req.query.minTime;
+    if (req.query.maxTime) options.maxTime = req.query.maxTime;
+    
     const client = azureDevOpsClient.createUserClient(userSettings.azureDevOps);
-    let builds = await client.getRecentBuilds(limit);
+    let builds = await client.getRecentBuilds(limit, options);
     
     // Filter by repository if specified
     if (repositoryFilter && repositoryFilter !== 'all') {

@@ -17,6 +17,7 @@ import { apiService } from '../api/apiService'
 import { useHealth } from '../contexts/HealthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ErrorMessage from '../components/ErrorMessage'
+import { BuildSuccessRateTrend } from '../components/BuildSuccessRateTrend'
 
 export default function Dashboard() {
   const [initialLoading, setInitialLoading] = useState(true)
@@ -34,6 +35,7 @@ export default function Dashboard() {
   })
   const [recentActivity, setRecentActivity] = useState([])
   const [liveUptime, setLiveUptime] = useState(0)
+  const [chartRefreshTrigger, setChartRefreshTrigger] = useState(0)
   const { isConnected, isChecking, healthData, checkConnection } = useHealth()
 
   // Live uptime counter that updates every second
@@ -79,6 +81,8 @@ export default function Dashboard() {
       checkConnection(),
       loadDashboardData()
     ])
+    // Trigger chart refresh
+    setChartRefreshTrigger(prev => prev + 1)
   }
 
   const loadDashboardData = async () => {
@@ -523,6 +527,11 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Build Success Rate Trend Chart */}
+      <div className="animate-fade-in" style={{animationDelay: '0.3s'}}>
+        <BuildSuccessRateTrend refreshTrigger={chartRefreshTrigger} />
       </div>
     </div>
   )
