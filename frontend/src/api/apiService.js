@@ -79,6 +79,11 @@ export const apiService = {
     return response.data
   },
 
+  async getPRCycleTime(days = 30) {
+    const response = await api.get(`/charts/pr-cycle-time?days=${days}`)
+    return response.data
+  },
+
   async getOverdueItems() {
     const response = await api.get('/work-items/overdue')
     return response.data

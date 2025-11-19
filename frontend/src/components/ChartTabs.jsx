@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { BuildSuccessRateTrend } from './BuildSuccessRateTrend'
 import { SprintBurndownChart } from './SprintBurndownChart'
-import { TrendingUp, Target } from "lucide-react"
+import { PRCycleTimeChart } from './PRCycleTimeChart'
+import { TrendingUp, Target, Clock } from "lucide-react"
 
 export function ChartTabs({ refreshTrigger }) {
   const [activeTab, setActiveTab] = useState('build-success')
@@ -20,6 +21,12 @@ export function ChartTabs({ refreshTrigger }) {
       label: 'Sprint Burndown',
       icon: Target,
       component: <SprintBurndownChart refreshTrigger={refreshTrigger} />
+    },
+    {
+      id: 'pr-cycle-time',
+      label: 'PR Cycle Time', 
+      icon: Clock,
+      component: <PRCycleTimeChart refreshTrigger={refreshTrigger} />
     }
   ]
 
@@ -27,7 +34,7 @@ export function ChartTabs({ refreshTrigger }) {
     <div className="w-full">
       {/* Tab Navigation */}
       <div className="border-b border-border bg-background">
-        <nav className="flex space-x-8 px-1" aria-label="Tabs">
+        <nav className="flex space-x-6 px-1" aria-label="Tabs">
           {tabs.map((tab) => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
