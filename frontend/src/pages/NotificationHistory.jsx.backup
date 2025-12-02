@@ -319,10 +319,26 @@ const NotificationHistory = () => {
                         </div>
                       )}
                       
-                      {/* Work Item-specific */}
-                      {notification.type === 'work-item' && notification.metadata && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-3 text-sm bg-muted/30 p-3 sm:p-4 rounded-md">
-                          {notification.metadata.workItemId && (
+                      {/* Azure DevOps Link */}
+                      {notification.metadata?.url && (
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <a 
+                            href={notification.metadata.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center gap-2 text-sm font-medium text-primary hover:underline px-4 py-2 bg-primary/5 rounded-md hover:bg-primary/10 transition-colors"
+                          >
+                            View in Azure DevOps
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                          <CopyButton content={notification.metadata.url} variant="outline" />
+                        </div>
+                      )}
+                      
+                      {/* Channel Status */}
+                      {notification.channels && notification.channels.length > 0 && (
+                            <>
+                              {notification.metadata.workItemId && (
                                 <div className="flex items-start gap-2">
                                   <Hash className="h-4 w-4 text-muted-foreground mt-0.5" />
                                   <div>
@@ -358,12 +374,12 @@ const NotificationHistory = () => {
                                   </div>
                                 </div>
                               )}
-                            </div>
+                            </>
                           )}
                           
                           {/* Pull Request-specific */}
-                          {notification.type === 'pull-request' && notification.metadata && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-3 text-sm bg-muted/30 p-3 sm:p-4 rounded-md">
+                          {notification.type === 'pull-request' && (
+                            <>
                               {notification.metadata.pullRequestId && (
                                 <div className="flex items-start gap-2">
                                   <Hash className="h-4 w-4 text-muted-foreground mt-0.5" />
@@ -409,8 +425,10 @@ const NotificationHistory = () => {
                                   </div>
                                 </div>
                               )}
-                            </div>
+                            </>
                           )}
+                        </div>
+                      )}
                       
                       {/* Overdue - detailed list */}
                       {notification.type === 'overdue' && notification.metadata.items && (
@@ -479,12 +497,18 @@ const NotificationHistory = () => {
                           )}
                           
                           {/* Idle PR - just show count */}
-                          {notification.type === 'idle-pr' && notification.metadata.count && (
-                            <div className="text-center py-4">
-                              <p className="text-xs text-muted-foreground mb-1">Idle Pull Requests</p>
-                              <p className="font-medium text-2xl">{notification.metadata.count} items</p>
-                            </div>
+                          {notification.type === 'idle-pr' && (
+                            <>
+                              {notification.metadata.count && (
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Count</p>
+                                  <p className="font-medium text-lg">{notification.metadata.count} items</p>
+                                </div>
+                              )}
+                            </>
                           )}
+                        </div>
+                      )}
                       
                       {/* Azure DevOps Link */}
                       {notification.metadata?.url && (
